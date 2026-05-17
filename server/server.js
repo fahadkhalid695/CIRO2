@@ -10,6 +10,9 @@ const { runSituationAnalyst } = require('./agents/situationAnalyst');
 const { runActionPlanner } = require('./agents/actionPlanner');
 const { runSimulationExecutor } = require('./agents/simulationExecutor');
 
+// Import Mock Data Generators
+const { generateWeatherData, generateTrafficData, getMockScenarios } = require('./mock/mockData');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -24,29 +27,22 @@ app.get('/api/health', (req, res) => {
 
 // GET /api/mock/weather → Returns simulated weather data
 app.get('/api/mock/weather', (req, res) => {
-  res.json({
-    location: req.query.location || 'Unknown',
-    data: {
-      temperature: 28,
-      rainfall: 'heavy',
-      windSpeed: 45,
-      alert: true,
-      description: 'Severe thunderstorm warning'
-    }
-  });
+  const location = req.query.location || 'G-10, Islamabad';
+  const data = generateWeatherData(location);
+  res.json({ location, data });
 });
 
 // GET /api/mock/traffic → Returns simulated traffic data
 app.get('/api/mock/traffic', (req, res) => {
-  res.json({
-    location: req.query.location || 'Unknown',
-    data: {
-      congestionLevel: 9,
-      blockedRoutes: ['Kashmir Highway', 'G-10 Markaz Road'],
-      averageSpeed: 5,
-      description: 'Major gridlock due to water logging'
-    }
-  });
+  const location = req.query.location || 'G-10';
+  const data = generateTrafficData(location);
+  res.json({ location, data });
+});
+
+// GET /api/mock/scenarios → Returns preset crisis scenarios
+app.get('/api/mock/scenarios', (req, res) => {
+  const scenarios = getMockScenarios();
+  res.json({ success: true, scenarios });
 });
 
 // POST /api/agent/detect → Run only Agent 2 (Crisis Detector)
