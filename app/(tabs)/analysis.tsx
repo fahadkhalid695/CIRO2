@@ -251,15 +251,15 @@ export default function AnalysisScreen() {
                     <View key={idx} style={styles.traceStepItem}>
                       <View style={styles.traceStepHeader}>
                         <View style={styles.traceStepLeft}>
-                          <View style={[styles.stepDot, { backgroundColor: step.status === 'completed' ? COLORS.success : COLORS.primary }]} />
-                          <Text style={styles.traceStepName}>{step.agent}</Text>
+                          <View style={[styles.stepDot, { backgroundColor: (step.status || 'completed') === 'completed' ? COLORS.success : COLORS.primary }]} />
+                          <Text style={styles.traceStepName}>{step.agent || `Agent Step ${idx + 1}`}</Text>
                         </View>
                         <Badge label={duration} variant="success" />
                       </View>
                       
                       <View style={styles.traceStepMeta}>
                         <Text style={styles.traceMetaLabel}>ADK Tool: <Text style={styles.traceMetaValue}>{toolName}</Text></Text>
-                        <Text style={styles.traceMetaLabel}>Status: <Text style={[styles.traceMetaValue, {color: COLORS.success, fontWeight: '700'}]}>{step.status.toUpperCase()}</Text></Text>
+                        <Text style={styles.traceMetaLabel}>Status: <Text style={[styles.traceMetaValue, {color: COLORS.success, fontWeight: '700'}]}>{(step.status || 'completed').toUpperCase()}</Text></Text>
                         
                         <TouchableOpacity 
                           style={styles.viewJsonBtn} 

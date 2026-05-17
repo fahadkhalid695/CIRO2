@@ -16,21 +16,7 @@ import { COLORS } from '../../constants/colors';
 import { Card, Badge, Button, SectionHeader, SuccessToast } from '../../components/ui';
 import { useAppStore } from '../../lib/store';
 
-// Conditionally import MapView to prevent web bundling failures
-let MapView: any = null;
-let Marker: any = null;
-let Polyline: any = null;
-
-if (Platform.OS !== 'web') {
-  try {
-    const MapModule = require('react-native-maps');
-    MapView = MapModule.default;
-    Marker = MapModule.Marker;
-    Polyline = MapModule.Polyline;
-  } catch (e) {
-    console.warn("Failed to load react-native-maps, falling back to vector simulation map.", e);
-  }
-}
+import { MapSimulation } from '../../components/simulation/MapSimulation';
 
 export default function SimulationScreen() {
   const router = useRouter();
@@ -197,83 +183,21 @@ export default function SimulationScreen() {
 
         {/* SECTION 3: Simulated Map View */}
         <SectionHeader title="Simulation Map Corridor" />
-        {MapView ? (
-          <View style={styles.mapContainer}>
-            <MapView
-              style={styles.map}
-              initialRegion={mapRegion}
-              customMapStyle={darkMapStyle}
-            >
-              {/* Crisis location */}
-              <Marker
-                coordinate={{ latitude: 33.6844, longitude: 73.0118 }}
-                title="Crisis Point"
-                description={currentSession.location}
-              >
-                <View style={styles.redMarkerDot} />
-              </Marker>
-
-              {/* Alt Routes */}
-              <Polyline
-                coordinates={alternateRoute1}
-                strokeColor={COLORS.primary}
-                strokeWidth={3}
-              />
-              <Polyline
-                coordinates={alternateRoute2}
-                strokeColor={COLORS.success}
-                strokeWidth={3}
-              />
-
-              {/* Emergency units */}
-              <Marker
-                coordinate={{ latitude: 33.6870, longitude: 73.0150 }}
-                title="Rescue 1122"
-              >
-                <View style={styles.ambulanceMarker}>
-                  <Ionicons name="medical" size={12} color="#FFF" />
-                </View>
-              </Marker>
-            </MapView>
-            <View style={styles.legend}>
-              <Text style={styles.legendText}>🔴 Crisis Area</Text>
-              <Text style={styles.legendText}>🔵 Diversion Corridors</Text>
-              <Text style={styles.legendText}>🚑 Active Emergency Units</Text>
-            </View>
-          </View>
-        ) : (
-          <Card variant="neutral" style={styles.vectorMapCard}>
-            <View style={styles.vectorMap}>
-              {/* Stunning Vector Map Fallback representing roads and diversion corridors */}
-              <View style={styles.vectorRoadContainer}>
-                {/* Horizontal main avenue */}
-                <View style={styles.vectorRoadH} />
-                {/* Vertical bypass */}
-                <View style={styles.vectorRoadV} />
-                
-                {/* Active diversion indicator */}
-                <View style={[styles.vectorIndicatorCircle, { left: '48%', top: '48%', backgroundColor: COLORS.danger }]}>
-                  <Ionicons name="warning" size={14} color="#FFF" />
-                </View>
-                
-                {/* Rescue unit truck moving */}
-                <View style={[styles.vectorIndicatorCircle, { left: '20%', top: '75%', backgroundColor: COLORS.primary }]}>
-                  <Ionicons name="medical" size={12} color="#FFF" />
-                </View>
-                
-                {/* Clear green route arrow */}
-                <View style={[styles.vectorIndicatorCircle, { left: '75%', top: '25%', backgroundColor: COLORS.success }]}>
-                  <Ionicons name="arrow-forward" size={12} color="#FFF" />
-                </View>
-              </View>
-            </View>
-            <View style={styles.legend}>
-              <Text style={styles.legendText}>🔴 G-10 Markaz (Blocked)</Text>
-              <Text style={styles.legendText}>🔵 F-10 Bypass (Clear)</Text>
-              <Text style={styles.legendText}>🚑 Rescue 1122 active</Text>
-            </View>
-          </Card>
-        )}
+        <MapSimulation 
+          crisisLocation={{
+            lat: 33.6844,
+            lng: 73.0118,
+            label: currentSession.location || "G-10 Markaz"
+          }}
+          simulatedRoutes={[
+            { id: 'blocked-corridor', coordinates: [{ latitude: 33.6844, longitude: 73.0118 }, { latitude: 33.6850, longitude: 73.0150 }], label: 'G-10 Markaz Blocked', type: 'blocked' },
+            { id: 'alt-1', coordinates: alternateRoute1, label: 'F-10 Bypass (Clear)', type: 'alternate' },
+            { id: 'alt-2', coordinates: alternateRoute2, label: 'Kashmir Highway (Slow)', type: 'alternate' }
+          ]}
+          emergencyUnits={[
+            { id: 'R-1122', type: 'ambulance', position: { latitude: 33.6890, longitude: 73.0200 }, targetPosition: { latitude: 33.6870, longitude: 73.0150 } }
+          ]}
+        />
 
         {/* SECTION 4: Emergency Tickets */}
         <SectionHeader title="Generated Dispatch Tickets" />
