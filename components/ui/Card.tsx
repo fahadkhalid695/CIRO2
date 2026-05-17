@@ -1,9 +1,32 @@
-import { View, Text } from 'react-native';
+import { View, StyleSheet, ViewStyle } from 'react-native';
+import { COLORS, StatusColor, getStatusColor } from '../../constants/colors';
 
-export function Card({ children }: { children: React.ReactNode }) {
+interface CardProps {
+  children: React.ReactNode;
+  variant?: StatusColor;
+  style?: ViewStyle;
+}
+
+export function Card({ children, variant = 'neutral', style }: CardProps) {
+  const borderColor = getStatusColor(variant);
+  
   return (
-    <View style={{ padding: 15, backgroundColor: 'white', borderRadius: 10, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 5 }}>
+    <View style={[
+      styles.card,
+      variant !== 'neutral' && { borderColor, borderWidth: 1 },
+      style
+    ]}>
       {children}
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  card: {
+    backgroundColor: COLORS.card,
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  }
+});
