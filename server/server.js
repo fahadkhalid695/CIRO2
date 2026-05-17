@@ -2,7 +2,13 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
-const Anthropic = require('@anthropic-ai/sdk');
+
+// Import Agents
+const { runSignalCollector } = require('./agents/signalCollector');
+const { runCrisisDetector } = require('./agents/crisisDetector');
+const { runSituationAnalyst } = require('./agents/situationAnalyst');
+const { runActionPlanner } = require('./agents/actionPlanner');
+const { runSimulationExecutor } = require('./agents/simulationExecutor');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -10,17 +16,6 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(cors());
 app.use(express.json());
-
-// Initialize Anthropic client (will use process.env.ANTHROPIC_API_KEY)
-const anthropic = new Anthropic();
-
-// Request payload shape for /api/analyze:
-// {
-//   "signals": [
-//     { "type": "social", "text": "Flash flood in G-10, cars stuck", "timestamp": "..." }, ...
-//   ],
-//   "location": "G-10, Islamabad"
-// }
 
 // GET /api/health → Health check
 app.get('/api/health', (req, res) => {
@@ -58,21 +53,19 @@ app.get('/api/mock/traffic', (req, res) => {
 app.post('/api/agent/detect', async (req, res) => {
   try {
     const { signals } = req.body;
+    if (!signals || !Array.isArray(signals)) {
+      return res.status(400).json({ error: 'signals is required and must be an array' });
+    }
     
-    // In a real scenario, you'd prompt Claude with the signals to extract crisis info
-    // For now, we simulate the output
-    const detectedCrisis = {
-      type: "Flash Flood",
-      location: "G-10, Islamabad",
-      confidence: 0.92,
-      severity: "HIGH",
-      summary: "Multiple reports of heavy flooding and stranded vehicles."
-    };
+    // First normalize signals
+    const normalizedData = await runSignalCollector(signals);
+    // Then detect
+    const detectedCrisis = await runCrisisDetector(normalizedData.normalizedSignals);
     
     res.json({ success: true, detectedCrisis });
   } catch (error) {
     console.error('Error in Crisis Detector:', error);
-    res.status(500).json({ error: 'Failed to run Crisis Detector agent' });
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -80,18 +73,15 @@ app.post('/api/agent/detect', async (req, res) => {
 app.post('/api/agent/analyze', async (req, res) => {
   try {
     const { crisisContext } = req.body;
+    if (!crisisContext) {
+      return res.status(400).json({ error: 'crisisContext is required' });
+    }
     
-    const analysis = {
-      impactedSectors: ['Residential', 'Transport'],
-      populationAtRisk: 2500,
-      resourceRequirements: ['Water Rescue Teams', 'Ambulances'],
-      explanation: "Given the topography of G-10 and current precipitation, water levels will continue to rise."
-    };
-    
+    const analysis = await runSituationAnalyst(crisisContext);
     res.json({ success: true, analysis });
   } catch (error) {
     console.error('Error in Situation Analyst:', error);
-    res.status(500).json({ error: 'Failed to run Situation Analyst agent' });
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -99,17 +89,15 @@ app.post('/api/agent/analyze', async (req, res) => {
 app.post('/api/agent/plan', async (req, res) => {
   try {
     const { analysisContext } = req.body;
+    if (!analysisContext) {
+      return res.status(400).json({ error: 'analysisContext is required' });
+    }
     
-    const actions = [
-      { id: 1, type: "DISPATCH", resource: "Water Rescue Unit 3", target: "G-10/4", priority: "CRITICAL" },
-      { id: 2, type: "ALERT", resource: "Public Broadcast System", target: "G-10 Residents", priority: "HIGH" },
-      { id: 3, type: "DIVERT_TRAFFIC", resource: "Traffic Police", target: "Kashmir Highway Exit", priority: "HIGH" }
-    ];
-    
-    res.json({ success: true, actions });
+    const responsePlan = await runActionPlanner(analysisContext);
+    res.json({ success: true, actions: responsePlan.actions });
   } catch (error) {
     console.error('Error in Action Planner:', error);
-    res.status(500).json({ error: 'Failed to run Action Planner agent' });
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -117,21 +105,15 @@ app.post('/api/agent/plan', async (req, res) => {
 app.post('/api/agent/simulate', async (req, res) => {
   try {
     const { actions } = req.body;
+    if (!actions) {
+      return res.status(400).json({ error: 'actions are required' });
+    }
     
-    const simulation = {
-      routes: ['Safe evacuation path via F-10', 'Emergency corridor on G-9 border'],
-      alerts: ['Evacuation alert sent to 4500 devices', 'Traffic diverted successfully'],
-      tickets: ['TKT-1029: Rescue Boat Deployed', 'TKT-1030: Medical Camp Setup'],
-      logs: [
-        { time: new Date().toISOString(), message: "Simulation started" },
-        { time: new Date().toISOString(), message: "Resources projected to arrive in 12 mins" }
-      ]
-    };
-    
+    const simulation = await runSimulationExecutor(actions);
     res.json({ success: true, simulation });
   } catch (error) {
     console.error('Error in Executor:', error);
-    res.status(500).json({ error: 'Failed to run Executor agent' });
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -139,62 +121,71 @@ app.post('/api/agent/simulate', async (req, res) => {
 app.post('/api/analyze', async (req, res) => {
   try {
     const { signals, location } = req.body;
-    const sessionId = uuidv4();
-    
-    // In a complete implementation, you would:
-    // 1. Gather all data (mock or real)
-    // 2. Pass sequentially to Anthropic Claude via the SDK
-    // Example:
-    /*
-    const response = await anthropic.messages.create({
-      model: "claude-3-5-sonnet-20241022",
-      max_tokens: 1024,
-      system: "You are the Crisis Orchestrator...",
-      messages: [{ role: "user", content: JSON.stringify({ signals, location }) }]
-    });
-    */
+    if (!signals || !Array.isArray(signals)) {
+      return res.status(400).json({ error: 'signals is required and must be an array' });
+    }
 
-    // For demonstration, we'll return a composite of the mocked agents above
+    const sessionId = uuidv4();
+    const agentTrace = [];
+
+    // Step 1: Normalization
+    agentTrace.push({ agent: "Signal Collector", status: "running", timestamp: new Date().toISOString() });
+    const normalData = await runSignalCollector(signals);
+    agentTrace[0].status = "completed";
+    agentTrace[0].completedAt = new Date().toISOString();
+
+    // Step 2: Detection
+    agentTrace.push({ agent: "Crisis Detector", status: "running", timestamp: new Date().toISOString() });
+    const detectedCrisis = await runCrisisDetector(normalData.normalizedSignals);
+    agentTrace[1].status = "completed";
+    agentTrace[1].completedAt = new Date().toISOString();
+
+    // Step 3: Situation Analysis
+    agentTrace.push({ agent: "Situation Analyst", status: "running", timestamp: new Date().toISOString() });
+    const analysis = await runSituationAnalyst(detectedCrisis);
+    agentTrace[2].status = "completed";
+    agentTrace[2].completedAt = new Date().toISOString();
+
+    // Step 4: Action Planner
+    agentTrace.push({ agent: "Action Planner", status: "running", timestamp: new Date().toISOString() });
+    const plan = await runActionPlanner(analysis);
+    agentTrace[3].status = "completed";
+    agentTrace[3].completedAt = new Date().toISOString();
+
+    // Step 5: Simulation Executor
+    agentTrace.push({ agent: "Simulation Executor", status: "running", timestamp: new Date().toISOString() });
+    const simulation = await runSimulationExecutor(plan.actions);
+    agentTrace[4].status = "completed";
+    agentTrace[4].completedAt = new Date().toISOString();
+
+    // Composite Response Shape matching user's requested specification:
     const responseData = {
       sessionId,
-      agentTrace: [
-        { agent: "Data Gatherer", status: "completed", timestamp: new Date().toISOString() },
-        { agent: "Crisis Detector", status: "completed", timestamp: new Date().toISOString() },
-        { agent: "Situation Analyst", status: "completed", timestamp: new Date().toISOString() },
-        { agent: "Action Planner", status: "completed", timestamp: new Date().toISOString() },
-        { agent: "Executor", status: "completed", timestamp: new Date().toISOString() }
-      ],
-      detectedCrisis: { 
-        type: "Flash Flood & Gridlock", 
-        location: location || "G-10, Islamabad", 
-        confidence: 0.92 
+      agentTrace,
+      detectedCrisis: {
+        type: detectedCrisis.crisisType || "NO_CRISIS",
+        location: detectedCrisis.location || location || "Unknown",
+        confidence: detectedCrisis.confidence || 0.0
       },
-      severity: "HIGH",
-      explanation: "Signals indicate severe flooding coupled with heavy traffic. Social media sentiment reflects rising panic, matching weather alerts for the sector.",
-      actions: [
-        { id: 1, type: "DISPATCH", resource: "Water Rescue Unit 3", target: "G-10/4", priority: "CRITICAL" },
-        { id: 2, type: "ALERT", resource: "Public Broadcast System", target: "G-10 Residents", priority: "HIGH" },
-        { id: 3, type: "DIVERT_TRAFFIC", resource: "Traffic Police", target: "Kashmir Highway Exit", priority: "HIGH" }
-      ],
+      severity: analysis.severity || "LOW",
+      explanation: analysis.explanation || "No active crisis could be confirmed.",
+      actions: plan.actions || [],
       simulation: {
-        routes: ['Safe evacuation path via F-10', 'Emergency corridor on G-9 border'],
-        alerts: ['Evacuation alert sent to 4500 devices', 'Traffic diverted successfully'],
-        tickets: ['TKT-1029: Rescue Boat Deployed', 'TKT-1030: Medical Camp Setup'],
-        logs: [
-          { time: new Date().toISOString(), message: "Simulation started" },
-          { time: new Date().toISOString(), message: "Resources projected to arrive in 12 mins" }
-        ]
+        routes: simulation.simulatedRoutes ? simulation.simulatedRoutes.map(r => `${r.name} (${r.status} - Congestion: ${r.congestionScore}/10)`) : [],
+        alerts: simulation.sentAlerts ? simulation.sentAlerts.map(a => `[${a.channel}] ${a.message} (Target: ${a.audienceSize} people)`) : [],
+        tickets: simulation.emergencyTickets ? simulation.emergencyTickets.map(t => `${t.ticketId}: ${t.subject} [${t.status}]`) : [],
+        logs: simulation.systemLogs ? simulation.systemLogs.map(l => ({ time: l.time, message: `[${l.level}] ${l.message}` })) : []
       },
-      outcome: { 
-        before: { casualties: "Unknown", trapped: 45, areaSubmerged: "30%" }, 
-        after: { casualties: 0, trapped: 0, areaSubmerged: "30%" } 
+      outcome: simulation.outcome || {
+        before: { congestionScore: 0, responseTime: "0 mins", affectedVehicles: 0 },
+        after: { congestionScore: 0, responseTime: "0 mins", affectedVehicles: 0 }
       }
     };
 
     res.json(responseData);
   } catch (error) {
     console.error('Error in Full Pipeline:', error);
-    res.status(500).json({ error: 'Failed to execute full analysis pipeline' });
+    res.status(500).json({ error: error.message });
   }
 });
 
