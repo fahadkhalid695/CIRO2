@@ -11,7 +11,7 @@ export default function DashboardScreen() {
   const router = useRouter();
   
   // Get Zustand state
-  const { recentSessions, setAnalysisComplete } = useAppStore();
+  const { recentSessions, loadPresetScenario, demoMode, setDemoMode } = useAppStore();
 
   const [showSplash, setShowSplash] = useState(true);
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -48,10 +48,10 @@ export default function DashboardScreen() {
   }, []);
 
   const handleSelectScenario = (scenario: PresetScenario) => {
-    // 1. Pre-populate full pre-computed Google ADK session state directly so demo works 100% offline
-    setAnalysisComplete(scenario.precomputedSession as any);
-    // 2. Navigate to real-time Multi-Agent Trace pipeline animation hub
-    router.push('/analysis');
+    // 1. Pre-populate the Zustand signals/location inputs with high-fidelity telemetry
+    loadPresetScenario(scenario);
+    // 2. Navigate to the Input screen pre-filled for editing
+    router.push('/input');
   };
 
   const handleSelectSession = (session: any) => {
@@ -89,6 +89,12 @@ export default function DashboardScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      {demoMode && (
+        <View style={styles.demoBanner}>
+          <Ionicons name="flash" size={14} color="#05070F" style={{ marginRight: 6 }} />
+          <Text style={styles.demoBannerText}>DEMO MODE ACTIVE — RUNNING IN OFFLINE EMULATION MODE</Text>
+        </View>
+      )}
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         
         {/* 1. Header */}
@@ -98,8 +104,8 @@ export default function DashboardScreen() {
             <Text style={styles.subtitle}>Crisis Intelligence & Response</Text>
           </View>
           <View style={styles.liveIndicator}>
-            <StatusDot status="ok" size={10} />
-            <Text style={styles.liveText}>SYSTEM ACTIVE</Text>
+            <StatusDot status={demoMode ? "warning" : "ok"} size={10} />
+            <Text style={styles.liveText}>{demoMode ? "OFFLINE DEMO" : "SYSTEM LIVE"}</Text>
           </View>
         </View>
 
@@ -127,6 +133,27 @@ export default function DashboardScreen() {
             <Text style={styles.statValue}>{avgResponseTime}</Text>
           </Card>
         </View>
+
+        {/* 2.5 Execution Engine Settings Toggle */}
+        <Card style={styles.configCard} variant="neutral">
+          <View style={styles.configHeader}>
+            <View style={{ flex: 1, paddingRight: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                <Ionicons name="cog" size={18} color={COLORS.primary} style={{ marginRight: 6 }} />
+                <Text style={styles.configTitle}>Execution Sandbox Settings</Text>
+              </View>
+              <Text style={styles.configSubtitle}>Offline Simulation speeds up judging checks, avoiding server setup requirements.</Text>
+            </View>
+            <TouchableOpacity 
+              style={[styles.toggleBtn, demoMode ? styles.toggleActive : styles.toggleInactive]}
+              onPress={() => setDemoMode(!demoMode)}
+              activeOpacity={0.85}
+            >
+              <View style={[styles.toggleCircle, demoMode ? styles.circleActive : styles.circleInactive]} />
+              <Text style={styles.toggleText}>{demoMode ? 'DEMO ACTIVE' : 'LIVE AGENT'}</Text>
+            </TouchableOpacity>
+          </View>
+        </Card>
 
         {/* 3. Quick Scenario Section */}
         <SectionHeader title="Quick Scenario Simulation" />
@@ -333,7 +360,7 @@ const styles = StyleSheet.create({
   },
   splashTitle: {
     fontSize: 48,
-    fontWeight: '950',
+    fontWeight: '900',
     color: '#FFF',
     letterSpacing: 4,
     textShadowColor: `${COLORS.primary}80`,
@@ -359,5 +386,91 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.5,
+  },
+  demoBanner: {
+    backgroundColor: COLORS.warning,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: `${COLORS.warning}40`,
+  },
+  demoBannerText: {
+    color: '#05070F',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  configCard: {
+    backgroundColor: COLORS.surface,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    padding: 14,
+    marginBottom: 18,
+    borderRadius: 12,
+  },
+  configHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  configTitle: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  configSubtitle: {
+    color: COLORS.textSecondary,
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 2,
+  },
+  toggleBtn: {
+    width: 105,
+    height: 34,
+    borderRadius: 17,
+    padding: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  toggleActive: {
+    backgroundColor: `${COLORS.warning}1A`,
+    borderWidth: 1.5,
+    borderColor: COLORS.warning,
+  },
+  toggleInactive: {
+    backgroundColor: `${COLORS.primary}1A`,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+  },
+  toggleCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    position: 'absolute',
+  },
+  circleActive: {
+    backgroundColor: COLORS.warning,
+    right: 4,
+  },
+  circleInactive: {
+    backgroundColor: COLORS.primary,
+    left: 4,
+  },
+  toggleText: {
+    color: '#FFF',
+    fontSize: 9,
+    fontWeight: '900',
+    position: 'absolute',
+    alignSelf: 'center',
+    width: '100%',
+    textAlign: 'center',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
 });

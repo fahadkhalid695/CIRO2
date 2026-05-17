@@ -16,7 +16,7 @@ import { Swipeable, RectButton } from 'react-native-gesture-handler';
 import axios from 'axios';
 import { COLORS } from '../../constants/colors';
 import { Card, Badge, Button, SectionHeader, SkeletonCard } from '../../components/ui';
-import { useAppStore, SessionResult } from '../../lib/store';
+import { useAppStore, AnalysisSession } from '../../lib/store';
 
 // Local Server URL fallback
 const API_BASE_URL = Platform.OS === 'android' ? 'http://10.0.2.2:3000/api' : 'http://localhost:3000/api';
@@ -24,13 +24,11 @@ const API_BASE_URL = Platform.OS === 'android' ? 'http://10.0.2.2:3000/api' : 'h
 export default function ActionsScreen() {
   const router = useRouter();
   
-  // Zustand Store
-  const { recentSessions, addSession } = useAppStore();
-  const currentSession = recentSessions.length > 0 ? recentSessions[0] : null;
+  // Zustand Store Integration
+  const { currentSession } = useAppStore();
 
   // Local States
   const [actionsList, setActionsList] = useState<any[]>([]);
-  const [simulatedSet, setSimulatedSet] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState<'ALL' | 'TRAFFIC' | 'EMERGENCY' | 'ALERT' | 'RESOURCE'>('ALL');
   const [loading, setLoading] = useState(false);
 
@@ -67,17 +65,27 @@ export default function ActionsScreen() {
   const resourceCount = actionsList.filter(a => a.category === 'RESOURCE').length;
 
   const handleToggleSimulated = (id: string) => {
-    const updated = new Set(simulatedSet);
-    if (updated.has(id)) {
-      updated.delete(id);
-    } else {
-      updated.add(id);
-    }
-    setSimulatedSet(updated);
+    if (!currentSession) return;
+    const updatedActions = currentSession.actions.map(action => 
+      action.id === id ? { ...action, simulated: !action.simulated } : action
+    );
+    useAppStore.setState({
+      currentSession: {
+        ...currentSession,
+        actions: updatedActions
+      }
+    });
   };
 
   const handleDismissAction = (id: string) => {
-    setActionsList(actionsList.filter(a => a.id !== id));
+    if (!currentSession) return;
+    const updatedActions = currentSession.actions.filter(action => action.id !== id);
+    useAppStore.setState({
+      currentSession: {
+        ...currentSession,
+        actions: updatedActions
+      }
+    });
   };
 
   const handleSimulateAll = async () => {
@@ -89,19 +97,23 @@ export default function ActionsScreen() {
       });
 
       // 2. Wrap simulated updates into Zustand active session
-      const updatedSession: SessionResult = {
+      const updatedSession: AnalysisSession = {
         ...currentSession,
         simulation: {
-          routes: response.data.simulation.simulatedRoutes ? response.data.simulation.simulatedRoutes.map((r: any) => `${r.name} (${r.status} - Congestion: ${r.congestionScore}/10)`) : [],
-          alerts: response.data.simulation.sentAlerts ? response.data.simulation.sentAlerts.map((a: any) => `[${a.channel}] ${a.message} (Target: ${a.audienceSize} people)`) : [],
-          tickets: response.data.simulation.emergencyTickets ? response.data.simulation.emergencyTickets.map((t: any) => `${t.ticketId}: ${t.subject} [${t.status}]`) : [],
-          logs: response.data.simulation.systemLogs ? response.data.simulation.systemLogs.map((l: any) => ({ time: l.time, message: `[${l.level}] ${l.message}` })) : []
+          simulatedRoutes: response.data.simulation.simulatedRoutes ? response.data.simulation.simulatedRoutes.map((r: any) => `${r.name} (${r.status} - Congestion: ${r.congestionScore}/10)`) : [],
+          sentAlerts: response.data.simulation.sentAlerts ? response.data.simulation.sentAlerts.map((a: any) => `[${a.channel}] ${a.message} (Target: ${a.audienceSize} people)`) : [],
+          emergencyTickets: response.data.simulation.emergencyTickets ? response.data.simulation.emergencyTickets.map((t: any) => `${t.ticketId}: ${t.subject} [${t.status}]`) : [],
+          systemLogs: response.data.simulation.systemLogs ? response.data.simulation.systemLogs.map((l: any) => ({ time: l.time, message: `[${l.level}] ${l.message}` })) : [],
+          outcome: response.data.simulation.outcome || currentSession.outcome
         },
         outcome: response.data.simulation.outcome || currentSession.outcome
       };
 
-      // Push updated session back to Zustand history
-      addSession(updatedSession);
+      // Push updated session back to Zustand store
+      useAppStore.setState({
+        currentSession: updatedSession,
+        sessions: [updatedSession, ...useAppStore.getState().sessions.filter(s => s.sessionId !== updatedSession.sessionId)]
+      });
 
       // Navigate to Simulation tab
       router.push('/simulation');
@@ -109,34 +121,42 @@ export default function ActionsScreen() {
       console.warn("Backend simulator failed or offline, launching high-fidelity local response outcome...", error);
 
       // Offline mock fallback matching requested schema
-      const fallbackSession: SessionResult = {
+      const fallbackSession: AnalysisSession = {
         ...currentSession,
         simulation: {
-          routes: [
+          simulatedRoutes: [
             "F-10 bypass is CLEAR (Congestion: 1/10)",
             "G-10 double road is BLOCKED (Congestion: 10/10)",
             "Kashmir highway corridor has SLOW FLOW (Congestion: 6/10)"
           ],
-          alerts: [
+          sentAlerts: [
             "[SMS] URGENT: High water logging in G-10. Evacuate via F-10 corridors (Target: 4,500 residents)",
             "[RADIO] FM 101 Broadcast alert: Divert traffic away from G-10 markaz"
           ],
-          tickets: [
+          emergencyTickets: [
             "TKT-1029: Rescue Boat Deployment [DISPATCHED]",
             "TKT-1030: Emergency Water Pump installation [OPEN]"
           ],
-          logs: [
+          systemLogs: [
             { time: new Date().toISOString(), message: "[INFO] Evacuation plan active" },
             { time: new Date().toISOString(), message: "[WARNING] Rescue delays due to gridlock on Expressway" }
-          ]
+          ],
+          outcome: {
+            before: { congestionScore: currentSession?.outcome?.before?.congestionScore || 9, responseTime: "45 mins", affectedVehicles: currentSession?.outcome?.before?.affectedVehicles || 340 },
+            after: { congestionScore: 3, responseTime: "12 mins", affectedVehicles: 15 }
+          }
         },
         outcome: {
-          before: { congestionScore: currentSession.outcome.before.congestionScore || 9, responseTime: "45 mins", affectedVehicles: currentSession.outcome.before.affectedVehicles || 340 },
+          before: { congestionScore: currentSession?.outcome?.before?.congestionScore || 9, responseTime: "45 mins", affectedVehicles: currentSession?.outcome?.before?.affectedVehicles || 340 },
           after: { congestionScore: 3, responseTime: "12 mins", affectedVehicles: 15 }
         }
       };
 
-      addSession(fallbackSession);
+      // Push updated session back to Zustand store
+      useAppStore.setState({
+        currentSession: fallbackSession,
+        sessions: [fallbackSession, ...useAppStore.getState().sessions.filter(s => s.sessionId !== fallbackSession.sessionId)]
+      });
       router.push('/simulation');
     } finally {
       setLoading(false);
@@ -259,7 +279,7 @@ export default function ActionsScreen() {
             <View style={styles.actionsListContainer}>
               {filteredActions.map((action) => {
                 const priInfo = getPriorityInfo(action.priority);
-                const isMarked = simulatedSet.has(action.id);
+                const isMarked = !!action.simulated;
                 
                 return (
                   <Swipeable

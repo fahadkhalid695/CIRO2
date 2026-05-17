@@ -36,8 +36,7 @@ export default function SimulationScreen() {
   const router = useRouter();
   
   // Zustand Store
-  const { recentSessions, clearActiveScenario } = useAppStore();
-  const currentSession = recentSessions.length > 0 ? recentSessions[0] : null;
+  const { currentSession } = useAppStore();
 
   // Local references and states
   const logScrollViewRef = useRef<ScrollView>(null);
@@ -62,15 +61,20 @@ export default function SimulationScreen() {
 
   const handleCopyLogs = () => {
     if (!currentSession) return;
-    const logString = currentSession.simulation.logs
-      .map(log => `[${new Date(log.time).toLocaleTimeString()}] ${log.message}`)
+    const logString = currentSession.simulation.systemLogs
+      .map((log: { time: string; message: string }) => `[${new Date(log.time).toLocaleTimeString()}] ${log.message}`)
       .join('\n');
     Clipboard.setString(logString);
     Alert.alert('Logs Copied', 'Simulated execution trace copied to clipboard.');
   };
 
   const handleNewAnalysis = () => {
-    clearActiveScenario();
+    useAppStore.setState({
+      currentLocation: '',
+      currentSignals: [],
+      activeScenario: null,
+      error: null
+    });
     router.push('/input');
   };
 
@@ -273,13 +277,13 @@ export default function SimulationScreen() {
 
         {/* SECTION 4: Emergency Tickets */}
         <SectionHeader title="Generated Dispatch Tickets" />
-        {currentSession.simulation.tickets.length === 0 ? (
+        {currentSession.simulation.emergencyTickets.length === 0 ? (
           <Card variant="neutral" style={styles.emptyRow}>
             <Text style={styles.emptyText}>No dispatch tickets generated.</Text>
           </Card>
         ) : (
           <View style={styles.ticketsList}>
-            {currentSession.simulation.tickets.map((t, idx) => {
+            {currentSession.simulation.emergencyTickets.map((t: string, idx: number) => {
               const [id, ...rest] = t.split(': ');
               const details = rest.join(': ');
               return (
@@ -301,13 +305,13 @@ export default function SimulationScreen() {
 
         {/* SECTION 5: Sent Alerts */}
         <SectionHeader title="Simulated Alerts Dispatched" />
-        {currentSession.simulation.alerts.length === 0 ? (
+        {currentSession.simulation.sentAlerts.length === 0 ? (
           <Card variant="neutral" style={styles.emptyRow}>
             <Text style={styles.emptyText}>No emergency alerts dispatched.</Text>
           </Card>
         ) : (
           <View style={styles.alertsList}>
-            {currentSession.simulation.alerts.map((alert, idx) => {
+            {currentSession.simulation.sentAlerts.map((alert: string, idx: number) => {
               const icon = alert.includes('SMS') ? 'phone-portrait-outline' : 'radio-outline';
               return (
                 <Card key={idx} variant="neutral" style={styles.alertRow}>
@@ -341,10 +345,10 @@ export default function SimulationScreen() {
             contentContainerStyle={styles.terminalContent}
             nestedScrollEnabled
           >
-            {currentSession.simulation.logs.length === 0 ? (
+            {currentSession.simulation.systemLogs.length === 0 ? (
               <Text style={styles.terminalLine}>[00:00:00] [SYSTEM] Ready to execute simulation trace...</Text>
             ) : (
-              currentSession.simulation.logs.map((log, idx) => (
+              currentSession.simulation.systemLogs.map((log: { time: string; message: string }, idx: number) => (
                 <Text key={idx} style={styles.terminalLine}>
                   [{new Date(log.time).toLocaleTimeString()}] {log.message}
                 </Text>
@@ -405,7 +409,7 @@ const styles = StyleSheet.create({
   },
   successTitle: {
     fontSize: 20,
-    fontWeight: '950',
+    fontWeight: '900',
     color: COLORS.textPrimary,
   },
   successSubtitle: {
@@ -451,7 +455,7 @@ const styles = StyleSheet.create({
   },
   valAfter: {
     fontSize: 18,
-    fontWeight: '850',
+    fontWeight: '800',
   },
   reductionLabel: {
     fontSize: 11,
@@ -610,7 +614,7 @@ const styles = StyleSheet.create({
   alertMsg: {
     fontSize: 13,
     color: COLORS.textPrimary,
-    fontWeight: '550',
+    fontWeight: '500',
     lineHeight: 18,
   },
   copyBtn: {

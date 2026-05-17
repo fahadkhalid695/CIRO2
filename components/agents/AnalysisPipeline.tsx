@@ -70,11 +70,11 @@ export function AnalysisPipeline({ activeStep }: AnalysisPipelineProps) {
             <Card 
               key={agent.id} 
               variant="neutral" 
-              style={[
+              style={StyleSheet.flatten([
                 styles.agentCard,
                 isRunning && styles.runningCard,
                 isComplete && styles.completeCard
-              ]}
+              ])}
             >
               <View style={styles.cardHeader}>
                 <View style={styles.cardHeaderLeft}>
@@ -163,7 +163,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 22,
-    fontWeight: '950',
+    fontWeight: '900',
     color: '#FFF',
     letterSpacing: 0.5,
   },

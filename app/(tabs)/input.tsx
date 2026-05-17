@@ -19,7 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { COLORS } from '../../constants/colors';
 import { Card, Badge, Button, SectionHeader } from '../../components/ui';
-import { useAppStore, SessionResult } from '../../lib/store';
+import { useAppStore, AnalysisSession } from '../../lib/store';
 import { MOCK_SCENARIOS, MockScenario } from '../../lib/mock';
 
 // Local Server URL fallback (standard Android emulator loopback / web)
@@ -29,7 +29,7 @@ export default function InputScreen() {
   const router = useRouter();
   
   // Zustand Store
-  const { activeScenario, setActiveScenario, addSession } = useAppStore();
+  const { activeScenario, currentLocation, currentSignals, startAnalysis } = useAppStore();
 
   // Component States
   const [location, setLocation] = useState('');
@@ -44,24 +44,55 @@ export default function InputScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Auto-fill if there is an active scenario in the store (e.g. from Home)
+  // Synchronize state if scenario is loaded
   useEffect(() => {
     if (activeScenario) {
       loadScenarioData(activeScenario);
     }
   }, [activeScenario]);
 
-  const loadScenarioData = (scenario: MockScenario) => {
+  useEffect(() => {
+    if (currentLocation) {
+      setLocation(currentLocation);
+    }
+  }, [currentLocation]);
+
+  useEffect(() => {
+    if (currentSignals && currentSignals.length > 0) {
+      const socialTexts = currentSignals
+        .filter(s => s.type === 'social')
+        .map(s => s.text || '');
+      setSocialSignals(socialTexts.length > 0 ? socialTexts : ['']);
+
+      const weatherSignal = currentSignals.find(s => s.type === 'weather');
+      if (weatherSignal && weatherSignal.data) {
+        setIncludeWeather(true);
+        setRainfall(weatherSignal.data.rainfall || 'none');
+      } else {
+        setIncludeWeather(false);
+      }
+
+      const trafficSignal = currentSignals.find(s => s.type === 'traffic');
+      if (trafficSignal && trafficSignal.data) {
+        setIncludeTraffic(true);
+        setCongestionLevel(trafficSignal.data.congestionScore || 5);
+      } else {
+        setIncludeTraffic(false);
+      }
+    }
+  }, [currentSignals]);
+
+  const loadScenarioData = (scenario: any) => {
     setLocation(scenario.location);
     
     // Extract social reports
     const socialTexts = scenario.signals
-      .filter(s => s.type === 'social')
-      .map(s => s.text || '');
+      .filter((s: any) => s.type === 'social')
+      .map((s: any) => s.text || '');
     setSocialSignals(socialTexts.length > 0 ? socialTexts : ['']);
 
     // Extract weather reports
-    const weatherSignal = scenario.signals.find(s => s.type === 'weather');
+    const weatherSignal = scenario.signals.find((s: any) => s.type === 'weather');
     if (weatherSignal && weatherSignal.data) {
       setIncludeWeather(true);
       setRainfall(weatherSignal.data.rainfall || 'none');
@@ -70,7 +101,7 @@ export default function InputScreen() {
     }
 
     // Extract traffic reports
-    const trafficSignal = scenario.signals.find(s => s.type === 'traffic');
+    const trafficSignal = scenario.signals.find((s: any) => s.type === 'traffic');
     if (trafficSignal && trafficSignal.data) {
       setIncludeTraffic(true);
       setCongestionLevel(trafficSignal.data.congestionScore || 5);
@@ -135,14 +166,20 @@ export default function InputScreen() {
 
     setLoading(true);
 
-    // 2. Prepare payload
+    // 2. Prepare payload signals list
     const signalsPayload: any[] = [];
-    filledSocial.forEach(text => {
-      signalsPayload.push({ type: 'social', text, timestamp: new Date().toISOString() });
+    filledSocial.forEach((text, idx) => {
+      signalsPayload.push({ 
+        id: `sig-${Date.now()}-${idx}`, 
+        type: 'social', 
+        text, 
+        timestamp: new Date().toISOString() 
+      });
     });
 
     if (includeWeather) {
       signalsPayload.push({
+        id: `sig-weather-${Date.now()}`,
         type: 'weather',
         data: {
           location,
@@ -158,6 +195,7 @@ export default function InputScreen() {
 
     if (includeTraffic) {
       signalsPayload.push({
+        id: `sig-traffic-${Date.now()}`,
         type: 'traffic',
         data: {
           location,
@@ -170,46 +208,18 @@ export default function InputScreen() {
     }
 
     try {
-      // 3. Perform REST endpoint call
-      const response = await axios.post(`${API_BASE_URL}/analyze`, {
-        signals: signalsPayload,
-        location
+      // 3. Update Zustand Store inputs atomically
+      useAppStore.setState({
+        currentLocation: location,
+        currentSignals: signalsPayload,
+        error: null
       });
 
-      // 4. Save response to Zustand history
-      addSession(response.data);
-
-      // 5. Navigate to Analysis Screen
+      // 4. Trigger Orchestration pipeline async and navigate immediately to loading steps
+      startAnalysis();
       router.push('/analysis');
-    } catch (error) {
-      console.warn("Backend analysis server failed or offline, falling back to simulated analysis local engine...", error);
-      
-      // Local premium mockup simulator if backend is offline, ensuring the user gets a functional demo
-      const mockResult: SessionResult = {
-        sessionId: `sim-${Date.now()}`,
-        timestamp: new Date().toISOString(),
-        location,
-        crisisType: rainfall === 'heavy' || rainfall === 'extreme' ? 'URBAN_FLOODING' : 'INFRASTRUCTURE_FAILURE',
-        severity: rainfall === 'extreme' ? 'CRITICAL' : 'HIGH',
-        explanation: `Analysis generated locally. Signals verified location '${location}' with heavy metrics. Social media reports corroborate rising safety emergency alerts.`,
-        actions: [
-          { id: "act-1", category: "EMERGENCY", priority: 5, title: "Rescue 1122 Deployment", description: `Dispatched medical & rescue boats to target sector: ${location}.`, estimatedImpact: "Civilian rescue zones clear." },
-          { id: "act-2", category: "TRAFFIC", priority: 4, title: "Gridlock Bypass Active", description: "Re-routed incoming double roads to alternate sectors.", estimatedImpact: "Traffic flow normalized." }
-        ],
-        simulation: {
-          routes: ["Alternate corridor is CLEAR", "Main highway is BLOCKED"],
-          alerts: ["SMS Emergency Broadcast dispatched to local area cells"],
-          tickets: ["TKT-991: Dispatch Active"],
-          logs: [{ time: new Date().toISOString(), message: "Local fallback simulator initialized successfully" }]
-        },
-        outcome: {
-          before: { congestionScore: congestionLevel, responseTime: "40 mins", affectedVehicles: trafficData.vehicles },
-          after: { congestionScore: 2, responseTime: "12 mins", affectedVehicles: 15 }
-        }
-      };
-
-      addSession(mockResult);
-      router.push('/analysis');
+    } catch (err) {
+      console.error("Zustand store startAnalysis trigger failed", err);
     } finally {
       setLoading(false);
     }

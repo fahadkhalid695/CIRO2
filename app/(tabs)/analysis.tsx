@@ -5,82 +5,46 @@ import {
   StyleSheet, 
   ScrollView, 
   SafeAreaView, 
-  TouchableOpacity 
+  TouchableOpacity,
+  Platform
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { FadeInUp, FadeIn, Layout } from 'react-native-reanimated';
+import Animated, { FadeInUp, FadeIn } from 'react-native-reanimated';
 import { COLORS } from '../../constants/colors';
-import { Card, Badge, Button, SectionHeader, StatusDot, AgentStep } from '../../components/ui';
+import { Card, Badge, Button, SectionHeader, StatusDot, AgentStep, NetworkErrorCard, ApiErrorCard } from '../../components/ui';
 import { useAppStore } from '../../lib/store';
-import { AnalysisPipeline } from '../../components/agents/AnalysisPipeline';
+import { AnalysisPipeline, AgentTraceViewer } from '../../components/agents';
 
 export default function AnalysisScreen() {
   const router = useRouter();
-  const { recentSessions } = useAppStore();
+  
+  // Zustand Store Integration
+  const { currentSession, isAnalyzing, analysisStep, error, startAnalysis, setDemoMode, clearError } = useAppStore();
 
-  const currentSession = recentSessions.length > 0 ? recentSessions[0] : null;
-
-  // Local state to manage the visual multi-agent trace steps
-  const [traceSessionId, setTraceSessionId] = useState<string | null>(null);
-  const [animating, setAnimating] = useState(false);
-  const [activeStep, setActiveStep] = useState(0); // 0 to 5
   const [collapsedExplanation, setCollapsedExplanation] = useState(true);
   const [collapsedTrace, setCollapsedTrace] = useState(true);
+  const [traceVisible, setTraceVisible] = useState(false);
   const [expandedPayloadIdx, setExpandedPayloadIdx] = useState<number | null>(null);
 
   const toggleViewPayload = (index: number) => {
     setExpandedPayloadIdx(expandedPayloadIdx === index ? null : index);
   };
 
-  // Trigger real-time multi-agent trace animation when a new session is processed
-  useEffect(() => {
-    if (currentSession && currentSession.sessionId !== traceSessionId) {
-      setTraceSessionId(currentSession.sessionId);
-      startAgentTraceAnimation();
-    }
-  }, [currentSession]);
+  const handleRetry = () => {
+    clearError();
+    startAnalysis();
+  };
 
-  const startAgentTraceAnimation = () => {
-    setAnimating(true);
-    setActiveStep(1);
-
-    // Sequence through each of the 5 agents
-    let step = 1;
-    const interval = setInterval(() => {
-      step += 1;
-      if (step <= 5) {
-        setActiveStep(step);
-      } else {
-        clearInterval(interval);
-        setAnimating(false);
-      }
-    }, 1200); // 1.2 seconds per agent step
+  const handleTryDemo = () => {
+    setDemoMode(true);
+    clearError();
+    startAnalysis();
   };
 
   const handleViewActionPlan = () => {
     router.push('/actions');
   };
-
-  // 0. Empty State
-  if (!currentSession) {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.emptyContainer}>
-          <Ionicons name="analytics" size={64} color={COLORS.textMuted} />
-          <Text style={styles.emptyTitle}>Crisis Analyst Hub</Text>
-          <Text style={styles.emptySubtitle}>
-            No active crisis telemetry detected. Please enter signals or load a preset scenario.
-          </Text>
-          <Button 
-            title="Go to Signal Input" 
-            onPress={() => router.push('/input')} 
-            style={styles.emptyBtn}
-          />
-        </View>
-      </SafeAreaView>
-    );
-  }
 
   const getSeverityColor = (sev: string) => {
     switch (sev) {
@@ -102,11 +66,50 @@ export default function AnalysisScreen() {
     }
   };
 
-  // State 1: Loading/Processing
-  if (animating) {
+  // State 1: Error Display Case
+  if (error) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <AnalysisPipeline activeStep={activeStep} />
+        <View style={{ flex: 1, justifyContent: 'center', padding: 20, backgroundColor: COLORS.background }}>
+          {error === 'NO_INTERNET' ? (
+            <NetworkErrorCard onRetry={handleRetry} />
+          ) : (
+            <ApiErrorCard 
+              message="The Google Gemini API request timed out. Please verify server connection." 
+              onRetry={handleRetry} 
+              onTryDemo={handleTryDemo} 
+            />
+          )}
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // State 2: Visual Multi-Agent Progress Pipeline
+  if (isAnalyzing) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <AnalysisPipeline activeStep={analysisStep} />
+      </SafeAreaView>
+    );
+  }
+
+  // State 3: Empty State (No Telemetry Sessions)
+  if (!currentSession) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.emptyContainer}>
+          <Ionicons name="analytics" size={64} color={COLORS.textMuted} />
+          <Text style={styles.emptyTitle}>Crisis Analyst Hub</Text>
+          <Text style={styles.emptySubtitle}>
+            No active crisis telemetry detected. Please enter signals or load a preset scenario.
+          </Text>
+          <Button 
+            title="Go to Signal Input" 
+            onPress={() => router.push('/input')} 
+            style={styles.emptyBtn}
+          />
+        </View>
       </SafeAreaView>
     );
   }
@@ -150,7 +153,7 @@ export default function AnalysisScreen() {
           <SectionHeader title="Situation Summary" />
           <Card variant="neutral" style={styles.summaryCard}>
             <View style={styles.summaryRow}>
-              <Ionicons name="shield-alert-outline" size={20} color={severityColor} style={styles.summaryIcon} />
+              <Ionicons name="alert-circle-outline" size={20} color={severityColor} style={styles.summaryIcon} />
               <View style={styles.summaryContent}>
                 <Text style={styles.summaryLabel}>Incident Severity</Text>
                 <Text style={[styles.summaryVal, { color: severityColor }]}>{currentSession.severity}</Text>
@@ -203,6 +206,16 @@ export default function AnalysisScreen() {
         {/* Google ADK / Antigravity Orchestrator Trace Card */}
         <Animated.View entering={FadeInUp.delay(450).duration(400)}>
           <SectionHeader title="Google ADK Agent Trace" />
+          
+          <TouchableOpacity 
+            style={styles.launchVisualizerBtn}
+            onPress={() => setTraceVisible(true)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="desktop-outline" size={16} color="#FFF" style={{ marginRight: 6 }} />
+            <Text style={styles.launchVisualizerText}>LAUNCH ADK INTERACTIVE DASHBOARD</Text>
+          </TouchableOpacity>
+
           <Card variant="neutral" style={styles.traceLogCard}>
             <TouchableOpacity 
               onPress={() => setCollapsedTrace(!collapsedTrace)}
@@ -291,6 +304,13 @@ export default function AnalysisScreen() {
         </Animated.View>
 
       </ScrollView>
+
+      {/* Interactive ADK Modal Viewer */}
+      <AgentTraceViewer 
+        visible={traceVisible}
+        onClose={() => setTraceVisible(false)}
+        trace={currentSession.agentTrace && currentSession.agentTrace.length > 0 ? currentSession.agentTrace as any : []}
+      />
     </SafeAreaView>
   );
 }
@@ -584,5 +604,26 @@ const styles = StyleSheet.create({
     color: '#38BDF8',
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
     lineHeight: 14,
+  },
+  launchVisualizerBtn: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  launchVisualizerText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.5,
   },
 });

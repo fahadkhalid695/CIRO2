@@ -491,7 +491,7 @@ const styles = StyleSheet.create({
   },
   unitBadgeText: {
     fontSize: 8,
-    fontWeight: '850',
+    fontWeight: '800',
     color: COLORS.textPrimary,
   },
   controlsContainer: {

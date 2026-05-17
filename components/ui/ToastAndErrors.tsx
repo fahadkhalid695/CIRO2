@@ -73,7 +73,7 @@ export function NetworkErrorCard({ onRetry }: NetworkErrorCardProps) {
       <Text style={styles.errorDesc}>
         Unable to reach CIRO Command Centers. Check your local telemetry logs or mobile internet coverage.
       </Text>
-      <Button variant="primary" label="Retry Sync" onPress={onRetry} icon="refresh" style={styles.errorBtn} />
+      <Button variant="primary" title="Retry Sync" onPress={onRetry} style={styles.errorBtn} />
     </Card>
   );
 }
@@ -95,10 +95,10 @@ export function ApiErrorCard({ message, onRetry, onTryDemo }: ApiErrorCardProps)
       
       <View style={styles.errorActionRow}>
         <View style={{ flex: 1 }}>
-          <Button variant="neutral" label="Retry" onPress={onRetry} />
+          <Button variant="ghost" title="Retry" onPress={onRetry} />
         </View>
         <View style={{ flex: 1.5 }}>
-          <Button variant="primary" label="Load Offline Demo" onPress={onTryDemo} />
+          <Button variant="primary" title="Load Offline Demo" onPress={onTryDemo} />
         </View>
       </View>
     </Card>
