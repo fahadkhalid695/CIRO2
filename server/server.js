@@ -10,6 +10,9 @@ const { runSituationAnalyst } = require('./agents/situationAnalyst');
 const { runActionPlanner } = require('./agents/actionPlanner');
 const { runSimulationExecutor } = require('./agents/simulationExecutor');
 
+// Import Google ADK Orchestrator
+const { CIROOrchestrator, globalOrchestrationTraces } = require('./orchestration/agentOrchestrator');
+
 // Import Mock Data Generators
 const { generateWeatherData, generateTrafficData, getMockScenarios } = require('./mock/mockData');
 
@@ -113,7 +116,7 @@ app.post('/api/agent/simulate', async (req, res) => {
   }
 });
 
-// POST /api/analyze → Full pipeline: takes signals, runs all agents, returns complete result
+// POST /api/analyze → Full pipeline powered by Google ADK Orchestrator
 app.post('/api/analyze', async (req, res) => {
   try {
     const { signals, location } = req.body;
@@ -121,66 +124,37 @@ app.post('/api/analyze', async (req, res) => {
       return res.status(400).json({ error: 'signals is required and must be an array' });
     }
 
-    const sessionId = uuidv4();
-    const agentTrace = [];
-
-    // Step 1: Normalization
-    agentTrace.push({ agent: "Signal Collector", status: "running", timestamp: new Date().toISOString() });
-    const normalData = await runSignalCollector(signals);
-    agentTrace[0].status = "completed";
-    agentTrace[0].completedAt = new Date().toISOString();
-
-    // Step 2: Detection
-    agentTrace.push({ agent: "Crisis Detector", status: "running", timestamp: new Date().toISOString() });
-    const detectedCrisis = await runCrisisDetector(normalData.normalizedSignals);
-    agentTrace[1].status = "completed";
-    agentTrace[1].completedAt = new Date().toISOString();
-
-    // Step 3: Situation Analysis
-    agentTrace.push({ agent: "Situation Analyst", status: "running", timestamp: new Date().toISOString() });
-    const analysis = await runSituationAnalyst(detectedCrisis);
-    agentTrace[2].status = "completed";
-    agentTrace[2].completedAt = new Date().toISOString();
-
-    // Step 4: Action Planner
-    agentTrace.push({ agent: "Action Planner", status: "running", timestamp: new Date().toISOString() });
-    const plan = await runActionPlanner(analysis);
-    agentTrace[3].status = "completed";
-    agentTrace[3].completedAt = new Date().toISOString();
-
-    // Step 5: Simulation Executor
-    agentTrace.push({ agent: "Simulation Executor", status: "running", timestamp: new Date().toISOString() });
-    const simulation = await runSimulationExecutor(plan.actions);
-    agentTrace[4].status = "completed";
-    agentTrace[4].completedAt = new Date().toISOString();
-
-    // Composite Response Shape matching user's requested specification:
-    const responseData = {
-      sessionId,
-      agentTrace,
-      detectedCrisis: {
-        type: detectedCrisis.crisisType || "NO_CRISIS",
-        location: detectedCrisis.location || location || "Unknown",
-        confidence: detectedCrisis.confidence || 0.0
-      },
-      severity: analysis.severity || "LOW",
-      explanation: analysis.explanation || "No active crisis could be confirmed.",
-      actions: plan.actions || [],
-      simulation: {
-        routes: simulation.simulatedRoutes ? simulation.simulatedRoutes.map(r => `${r.name} (${r.status} - Congestion: ${r.congestionScore}/10)`) : [],
-        alerts: simulation.sentAlerts ? simulation.sentAlerts.map(a => `[${a.channel}] ${a.message} (Target: ${a.audienceSize} people)`) : [],
-        tickets: simulation.emergencyTickets ? simulation.emergencyTickets.map(t => `${t.ticketId}: ${t.subject} [${t.status}]`) : [],
-        logs: simulation.systemLogs ? simulation.systemLogs.map(l => ({ time: l.time, message: `[${l.level}] ${l.message}` })) : []
-      },
-      outcome: simulation.outcome || {
-        before: { congestionScore: 0, responseTime: "0 mins", affectedVehicles: 0 },
-        after: { congestionScore: 0, responseTime: "0 mins", affectedVehicles: 0 }
-      }
-    };
-
-    res.json(responseData);
+    const orchestratedData = await CIROOrchestrator.executePipeline(signals, location);
+    res.json(orchestratedData);
   } catch (error) {
-    console.error('Error in Full Pipeline:', error);
+    console.error('Error in ADK Orchestrate Pipeline via /api/analyze:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/orchestrate/trace → Returns the full ADK agent trace log
+app.get('/api/orchestrate/trace', (req, res) => {
+  res.json({
+    success: true,
+    agentName: CIROOrchestrator.name,
+    description: CIROOrchestrator.description,
+    totalTraces: globalOrchestrationTraces.length,
+    traces: globalOrchestrationTraces
+  });
+});
+
+// POST /api/orchestrate → Google ADK Orchestrated sequential pipeline execution
+app.post('/api/orchestrate', async (req, res) => {
+  try {
+    const { signals, location } = req.body;
+    if (!signals || !Array.isArray(signals)) {
+      return res.status(400).json({ error: 'signals is required and must be an array' });
+    }
+
+    const orchestratedData = await CIROOrchestrator.executePipeline(signals, location);
+    res.json(orchestratedData);
+  } catch (error) {
+    console.error('Error in ADK Orchestrate Pipeline:', error);
     res.status(500).json({ error: error.message });
   }
 });

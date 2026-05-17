@@ -25,6 +25,12 @@ export default function AnalysisScreen() {
   const [animating, setAnimating] = useState(false);
   const [activeStep, setActiveStep] = useState(0); // 0 to 5
   const [collapsedExplanation, setCollapsedExplanation] = useState(true);
+  const [collapsedTrace, setCollapsedTrace] = useState(true);
+  const [expandedPayloadIdx, setExpandedPayloadIdx] = useState<number | null>(null);
+
+  const toggleViewPayload = (index: number) => {
+    setExpandedPayloadIdx(expandedPayloadIdx === index ? null : index);
+  };
 
   // Trigger real-time multi-agent trace animation when a new session is processed
   useEffect(() => {
@@ -248,6 +254,87 @@ export default function AnalysisScreen() {
           </Card>
         </Animated.View>
 
+        {/* Google ADK / Antigravity Orchestrator Trace Card */}
+        <Animated.View entering={FadeInUp.delay(450).duration(400)}>
+          <SectionHeader title="Google ADK Agent Trace" />
+          <Card variant="neutral" style={styles.traceLogCard}>
+            <TouchableOpacity 
+              onPress={() => setCollapsedTrace(!collapsedTrace)}
+              activeOpacity={0.7}
+              style={styles.traceToggle}
+            >
+              <View style={styles.traceToggleHeader}>
+                <Ionicons name="git-branch" size={16} color={COLORS.primary} style={{ marginRight: 6 }} />
+                <Text style={styles.traceHeaderTitle}>CIROOrchestrator Logs</Text>
+              </View>
+              <Ionicons 
+                name={collapsedTrace ? "chevron-down" : "chevron-up"} 
+                size={20} 
+                color={COLORS.textSecondary} 
+              />
+            </TouchableOpacity>
+
+            {!collapsedTrace && (
+              <Animated.View entering={FadeIn} style={styles.traceContent}>
+                <Text style={styles.traceAgentDesc}>
+                  Agent: <Text style={{fontWeight: 'bold', color: COLORS.textPrimary}}>CIROOrchestrator</Text>{"\n"}
+                  Description: Coordinates multi-agent crisis detection and response for Pakistani metropolitan areas.
+                </Text>
+                
+                {currentSession.agentTrace && currentSession.agentTrace.map((step: any, idx: number) => {
+                  const duration = step.durationMs ? `${step.durationMs}ms` : 'Completed';
+                  const toolName = step.metadata?.adkTool || 
+                                   (idx === 0 ? 'signalNormalizationTool' :
+                                    idx === 1 ? 'crisisDetectionTool' :
+                                    idx === 2 ? 'situationAnalysisTool' :
+                                    idx === 3 ? 'actionPlanningTool' : 'simulationTool');
+                  return (
+                    <View key={idx} style={styles.traceStepItem}>
+                      <View style={styles.traceStepHeader}>
+                        <View style={styles.traceStepLeft}>
+                          <View style={[styles.stepDot, { backgroundColor: step.status === 'completed' ? COLORS.success : COLORS.primary }]} />
+                          <Text style={styles.traceStepName}>{step.agent}</Text>
+                        </View>
+                        <Badge label={duration} variant="success" />
+                      </View>
+                      
+                      <View style={styles.traceStepMeta}>
+                        <Text style={styles.traceMetaLabel}>ADK Tool: <Text style={styles.traceMetaValue}>{toolName}</Text></Text>
+                        <Text style={styles.traceMetaLabel}>Status: <Text style={[styles.traceMetaValue, {color: COLORS.success, fontWeight: '700'}]}>{step.status.toUpperCase()}</Text></Text>
+                        
+                        <TouchableOpacity 
+                          style={styles.viewJsonBtn} 
+                          onPress={() => toggleViewPayload(idx)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.viewJsonText}>
+                            {expandedPayloadIdx === idx ? 'Hide ADK Parameters ▲' : 'View ADK Parameters ▼'}
+                          </Text>
+                        </TouchableOpacity>
+                        
+                        {expandedPayloadIdx === idx && (
+                          <View style={styles.jsonBlock}>
+                            <Text style={styles.jsonTitle}>ADK Telemetry Parameters:</Text>
+                            <Text style={styles.jsonCode}>
+                              {JSON.stringify({
+                                tool: toolName,
+                                status: step.status,
+                                timestamp: step.timestamp,
+                                input: step.metadata?.adkInput || "Raw data stream feeds from local sectors",
+                                output: step.metadata?.adkOutput || "Processed multi-agent state mapping outcomes"
+                              }, null, 2)}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  );
+                })}
+              </Animated.View>
+            )}
+          </Card>
+        </Animated.View>
+
         {/* View Action Plan Button */}
         <Animated.View entering={FadeInUp.delay(500).duration(400)}>
           <Button 
@@ -448,5 +535,108 @@ const styles = StyleSheet.create({
   actionBtn: {
     marginTop: 24,
     marginBottom: 16,
+  },
+  traceLogCard: {
+    padding: 12,
+    marginTop: 4,
+  },
+  traceToggle: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  traceToggleHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  traceHeaderTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  traceContent: {
+    marginTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    paddingTop: 12,
+    gap: 16,
+  },
+  traceAgentDesc: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    lineHeight: 18,
+    backgroundColor: `${COLORS.background}50`,
+    padding: 10,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  traceStepItem: {
+    borderBottomWidth: 1,
+    borderBottomColor: `${COLORS.border}50`,
+    paddingBottom: 12,
+    gap: 8,
+  },
+  traceStepHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  traceStepLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  stepDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  traceStepName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  traceStepMeta: {
+    paddingLeft: 16,
+    gap: 4,
+  },
+  traceMetaLabel: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+  },
+  traceMetaValue: {
+    color: COLORS.textPrimary,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  viewJsonBtn: {
+    marginTop: 6,
+    alignSelf: 'flex-start',
+  },
+  viewJsonText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  jsonBlock: {
+    backgroundColor: '#0F1626',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 6,
+    padding: 10,
+    marginTop: 8,
+  },
+  jsonTitle: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    marginBottom: 6,
+    fontWeight: '700',
+  },
+  jsonCode: {
+    fontSize: 10,
+    color: '#38BDF8',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    lineHeight: 14,
   },
 });
