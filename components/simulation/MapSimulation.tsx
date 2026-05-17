@@ -6,7 +6,8 @@ import {
   TouchableOpacity, 
   Platform, 
   Animated,
-  Easing
+  Easing,
+  ActivityIndicator
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
@@ -58,6 +59,33 @@ export function MapSimulation({ crisisLocation, simulatedRoutes, emergencyUnits 
     latitude: crisisLocation.lat,
     longitude: crisisLocation.lng
   };
+
+  const [mapLoading, setMapLoading] = useState(true);
+  const scanAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    // Animate radar sweep scanning
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(scanAnim, {
+          toValue: 1,
+          duration: 1800,
+          useNativeDriver: true
+        }),
+        Animated.timing(scanAnim, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true
+        })
+      ])
+    ).start();
+
+    const timer = setTimeout(() => {
+      setMapLoading(false);
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   // 1. Animated pulsing marker setup
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -199,6 +227,41 @@ export function MapSimulation({ crisisLocation, simulatedRoutes, emergencyUnits 
       </View>
     </View>
   );
+
+  if (mapLoading) {
+    const scanTranslateY = scanAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [-10, 290]
+    });
+
+    return (
+      <View style={styles.container}>
+        <View style={styles.mapLoadingFrame}>
+          {/* Animated Scanning Sweep Line */}
+          <Animated.View style={[
+            styles.scanningLine,
+            { transform: [{ translateY: scanTranslateY }] }
+          ]} />
+          
+          {/* Decorative Grid Lines Overlay (Satellite scan feel) */}
+          <View style={styles.scanningGridOverlay}>
+            <View style={styles.gridLineH1} />
+            <View style={styles.gridLineH2} />
+            <View style={styles.gridLineV1} />
+            <View style={styles.gridLineV2} />
+          </View>
+
+          {/* Text Indicators */}
+          <View style={styles.loadingInfo}>
+            <ActivityIndicator size="small" color={COLORS.primary} style={{ marginBottom: 12 }} />
+            <Text style={styles.loadingMainText}>INITIALIZING MAP SIMULATION...</Text>
+            <Text style={styles.loadingSubText}>Acquiring twin-city digital satellite nodes...</Text>
+          </View>
+        </View>
+        {renderLegend()}
+      </View>
+    );
+  }
 
   // Render Web Fallback vector map
   if (!MapView) {
@@ -596,5 +659,82 @@ const styles = StyleSheet.create({
     top: 10,
     right: 10,
     gap: 6,
+  },
+  mapLoadingFrame: {
+    height: 280,
+    backgroundColor: '#070B14',
+    borderColor: COLORS.border,
+    borderWidth: 1,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  scanningLine: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 4,
+    backgroundColor: COLORS.primary,
+    opacity: 0.8,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 10,
+    zIndex: 2,
+  },
+  scanningGridOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.1,
+  },
+  gridLineH1: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: '33%',
+    height: 1,
+    backgroundColor: '#FFF',
+  },
+  gridLineH2: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: '66%',
+    height: 1,
+    backgroundColor: '#FFF',
+  },
+  gridLineV1: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: '33%',
+    width: 1,
+    backgroundColor: '#FFF',
+  },
+  gridLineV2: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: '66%',
+    width: 1,
+    backgroundColor: '#FFF',
+  },
+  loadingInfo: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 3,
+  },
+  loadingMainText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+  },
+  loadingSubText: {
+    color: COLORS.textSecondary,
+    fontSize: 10,
+    fontWeight: '600',
+    marginTop: 4,
   },
 });

@@ -13,6 +13,7 @@ import Animated, { FadeInUp, FadeIn, Layout } from 'react-native-reanimated';
 import { COLORS } from '../../constants/colors';
 import { Card, Badge, Button, SectionHeader, StatusDot, AgentStep } from '../../components/ui';
 import { useAppStore } from '../../lib/store';
+import { AnalysisPipeline } from '../../components/agents/AnalysisPipeline';
 
 export default function AnalysisScreen() {
   const router = useRouter();
@@ -105,62 +106,7 @@ export default function AnalysisScreen() {
   if (animating) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <ScrollView contentContainerStyle={styles.container}>
-          <View style={styles.header}>
-            <View>
-              <Text style={styles.processingTitle}>AI Orchestrator Pipeline</Text>
-              <Text style={styles.processingSub}>Sequencing multi-agent telemetry...</Text>
-            </View>
-            <StatusDot status="warning" size={12} />
-          </View>
-
-          <View style={styles.traceContainer}>
-            {/* Agent 1 */}
-            <AgentStep 
-              name="Agent 1 — Signal Collector" 
-              iconName="cloud-download-outline" 
-              status={activeStep === 1 ? 'running' : activeStep > 1 ? 'done' : 'pending'} 
-              output={activeStep >= 1 ? "Normalizing informal Roman Urdu/English reports and APIs..." : undefined}
-            />
-
-            {/* Agent 2 */}
-            <AgentStep 
-              name="Agent 2 — Crisis Detector" 
-              iconName="warning-outline" 
-              status={activeStep === 2 ? 'running' : activeStep > 2 ? 'done' : 'pending'} 
-              output={activeStep >= 2 ? "Analyzing signal clusters for crisis patterns..." : undefined}
-            />
-
-            {/* Agent 3 */}
-            <AgentStep 
-              name="Agent 3 — Situation Analyst" 
-              iconName="analytics-outline" 
-              status={activeStep === 3 ? 'running' : activeStep > 3 ? 'done' : 'pending'} 
-              output={activeStep >= 3 ? "Estimating population threat, affected boundaries..." : undefined}
-            />
-
-            {/* Agent 4 */}
-            <AgentStep 
-              name="Agent 4 — Action Planner" 
-              iconName="construct-outline" 
-              status={activeStep === 4 ? 'running' : activeStep > 4 ? 'done' : 'pending'} 
-              output={activeStep >= 4 ? "Designing localized responder deployment schedules..." : undefined}
-            />
-
-            {/* Agent 5 */}
-            <AgentStep 
-              name="Agent 5 — Simulation Executor" 
-              iconName="play-forward-outline" 
-              status={activeStep === 5 ? 'running' : activeStep > 5 ? 'done' : 'pending'} 
-              output={activeStep >= 5 ? "Executing path simulations & outcomes..." : undefined}
-            />
-          </View>
-
-          <View style={styles.loaderFooter}>
-            <ActivityIndicator size="small" color={COLORS.primary} />
-            <Text style={styles.loaderFooterText}>Orchestrating Gemini responses...</Text>
-          </View>
-        </ScrollView>
+        <AnalysisPipeline activeStep={activeStep} />
       </SafeAreaView>
     );
   }

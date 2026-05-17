@@ -13,7 +13,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
-import { Card, Badge, Button, SectionHeader } from '../../components/ui';
+import { Card, Badge, Button, SectionHeader, SuccessToast } from '../../components/ui';
 import { useAppStore } from '../../lib/store';
 
 // Conditionally import MapView to prevent web bundling failures
@@ -41,6 +41,15 @@ export default function SimulationScreen() {
 
   // Local references and states
   const logScrollViewRef = useRef<ScrollView>(null);
+  const [toastVisible, setToastVisible] = useState(false);
+
+  useEffect(() => {
+    if (currentSession) {
+      // Small timeout to let screen transition finish before dropping the premium toast
+      const t = setTimeout(() => setToastVisible(true), 250);
+      return () => clearTimeout(t);
+    }
+  }, [currentSession]);
 
   useEffect(() => {
     // Auto-scroll logs to bottom if they load
@@ -109,6 +118,11 @@ export default function SimulationScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <SuccessToast 
+        message={`Simulation complete — impact reduced by ${Math.round(((beforeScore - afterScore) / beforeScore) * 100)}%!`} 
+        visible={toastVisible} 
+        onDismiss={() => setToastVisible(false)} 
+      />
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         
         {/* SECTION 1: Simulation Header */}

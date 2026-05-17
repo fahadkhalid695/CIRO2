@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, Animated, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
@@ -12,6 +12,40 @@ export default function DashboardScreen() {
   
   // Get Zustand state
   const { recentSessions, setAnalysisComplete } = useAppStore();
+
+  const [showSplash, setShowSplash] = useState(true);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+
+  useEffect(() => {
+    // Prevent replaying splash on tab switching
+    if ((global as any).splashAlreadyPlayed) {
+      setShowSplash(false);
+      return;
+    }
+
+    // 1. Fade in CIRO Logo
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 800,
+      useNativeDriver: true
+    }).start();
+
+    // 2. Slide up subtitle
+    Animated.timing(slideAnim, {
+      toValue: 0,
+      duration: 1000,
+      useNativeDriver: true
+    }).start();
+
+    // 3. Complete launch transition
+    const timer = setTimeout(() => {
+      (global as any).splashAlreadyPlayed = true;
+      setShowSplash(false);
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   const handleSelectScenario = (scenario: PresetScenario) => {
     // 1. Pre-populate full pre-computed Google ADK session state directly so demo works 100% offline
@@ -31,6 +65,27 @@ export default function DashboardScreen() {
   const avgResponseTime = recentSessions.length > 0 
     ? `${Math.round(recentSessions.reduce((acc, s) => acc + parseInt(s.outcome.after.responseTime || '12'), 0) / recentSessions.length)}m` 
     : '12m';
+
+  if (showSplash) {
+    return (
+      <SafeAreaView style={[styles.safeArea, styles.splashContainer]}>
+        <Animated.View style={[styles.splashContent, { opacity: fadeAnim }]}>
+          <View style={styles.splashLogoContainer}>
+            <Ionicons name="shield-checkmark" size={68} color={COLORS.primary} />
+            <Text style={styles.splashTitle}>CIRO</Text>
+          </View>
+          
+          <Animated.View style={{ transform: [{ translateY: slideAnim }] }}>
+            <Text style={styles.splashSubtitle}>CRISIS INTELLIGENCE & RESPONSE</Text>
+            <View style={styles.splashTelemetryRow}>
+              <ActivityIndicator size="small" color={COLORS.success} style={{ marginRight: 6 }} />
+              <Text style={styles.splashTelemetryText}>Syncing satellite feeds...</Text>
+            </View>
+          </Animated.View>
+        </Animated.View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -261,5 +316,48 @@ const styles = StyleSheet.create({
   sessionTime: {
     fontSize: 12,
     color: COLORS.textSecondary,
+  },
+  splashContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#05070F',
+  },
+  splashContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 24,
+  },
+  splashLogoContainer: {
+    alignItems: 'center',
+    gap: 12,
+  },
+  splashTitle: {
+    fontSize: 48,
+    fontWeight: '950',
+    color: '#FFF',
+    letterSpacing: 4,
+    textShadowColor: `${COLORS.primary}80`,
+    textShadowOffset: { width: 0, height: 4 },
+    textShadowRadius: 15,
+  },
+  splashSubtitle: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontWeight: '800',
+    letterSpacing: 2.5,
+    textAlign: 'center',
+  },
+  splashTelemetryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+    gap: 8,
+  },
+  splashTelemetryText: {
+    color: COLORS.success,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
 });

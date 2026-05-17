@@ -15,7 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Swipeable, RectButton } from 'react-native-gesture-handler';
 import axios from 'axios';
 import { COLORS } from '../../constants/colors';
-import { Card, Badge, Button, SectionHeader } from '../../components/ui';
+import { Card, Badge, Button, SectionHeader, SkeletonCard } from '../../components/ui';
 import { useAppStore, SessionResult } from '../../lib/store';
 
 // Local Server URL fallback
@@ -244,7 +244,13 @@ export default function ActionsScreen() {
           </ScrollView>
 
           {/* 4. Action Cards List */}
-          {filteredActions.length === 0 ? (
+          {loading ? (
+            <View style={styles.actionsListContainer}>
+              <SkeletonCard height={120} />
+              <SkeletonCard height={120} />
+              <SkeletonCard height={120} />
+            </View>
+          ) : filteredActions.length === 0 ? (
             <Card variant="neutral" style={styles.emptyActionsCard}>
               <Ionicons name="checkmark-circle-outline" size={32} color={COLORS.success} />
               <Text style={styles.emptyActionsText}>No pending actions in this category.</Text>
