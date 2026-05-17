@@ -4,3 +4,4 @@ export * from './Badge';
 export * from './StatusDot';
 export * from './SectionHeader';
 export * from './AgentStep';
+export * from './ScenarioCard';

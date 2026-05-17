@@ -1,27 +1,27 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, FlatList } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
-import { Card, Badge, StatusDot, SectionHeader } from '../../components/ui';
-import { useAppStore, SessionResult } from '../../lib/store';
-import { MOCK_SCENARIOS, MockScenario } from '../../lib/mock';
+import { Card, Badge, StatusDot, SectionHeader, ScenarioCard } from '../../components/ui';
+import { useAppStore } from '../../lib/store';
+import { PRESET_SCENARIOS, PresetScenario } from '../../lib/mock/scenarios';
 
 export default function DashboardScreen() {
   const router = useRouter();
   
   // Get Zustand state
-  const { recentSessions, setActiveScenario } = useAppStore();
+  const { recentSessions, setAnalysisComplete } = useAppStore();
 
-  const handleSelectScenario = (scenario: MockScenario) => {
-    // 1. Pre-fill state in Zustand store
-    setActiveScenario(scenario);
-    // 2. Navigate to Analysis screen
+  const handleSelectScenario = (scenario: PresetScenario) => {
+    // 1. Pre-populate full pre-computed Google ADK session state directly so demo works 100% offline
+    setAnalysisComplete(scenario.precomputedSession as any);
+    // 2. Navigate to real-time Multi-Agent Trace pipeline animation hub
     router.push('/analysis');
   };
 
-  const handleSelectSession = (session: SessionResult) => {
-    // For demonstration, navigate to the simulation screen to view this session's outcome
+  const handleSelectSession = (session: any) => {
+    // For demonstration, navigate to the simulation screen to view this session's outcome comparison
     router.push('/simulation');
   };
 
@@ -29,7 +29,7 @@ export default function DashboardScreen() {
   const activeAlerts = recentSessions.filter(s => s.severity === 'CRITICAL' || s.severity === 'HIGH').length;
   const simulationsRun = recentSessions.length;
   const avgResponseTime = recentSessions.length > 0 
-    ? `${Math.round(recentSessions.reduce((acc, s) => acc + parseInt(s.outcome.after.responseTime), 0) / recentSessions.length)}m` 
+    ? `${Math.round(recentSessions.reduce((acc, s) => acc + parseInt(s.outcome.after.responseTime || '12'), 0) / recentSessions.length)}m` 
     : '12m';
 
   return (
@@ -75,32 +75,17 @@ export default function DashboardScreen() {
 
         {/* 3. Quick Scenario Section */}
         <SectionHeader title="Quick Scenario Simulation" />
-        <View style={styles.scenariosGrid}>
-          {MOCK_SCENARIOS.map((scenario) => (
-            <TouchableOpacity 
-              key={scenario.id} 
+        <View style={styles.scenariosList}>
+          {PRESET_SCENARIOS.map((scenario, idx) => (
+            <ScenarioCard
+              key={scenario.id}
+              title={scenario.title}
+              subtitle={scenario.subtitle}
+              location={scenario.location}
+              iconName={scenario.iconName as any}
+              index={idx}
               onPress={() => handleSelectScenario(scenario)}
-              activeOpacity={0.8}
-              style={styles.scenarioPressable}
-            >
-              <Card variant="neutral" style={styles.scenarioCard}>
-                <View style={styles.scenarioHeader}>
-                  <View style={styles.iconCircle}>
-                    <Ionicons name={scenario.icon as any} size={20} color={COLORS.primary} />
-                  </View>
-                  <Text style={styles.scenarioTitle} numberOfLines={1}>{scenario.title}</Text>
-                </View>
-                
-                <Text style={styles.scenarioLoc} numberOfLines={1}>
-                  <Ionicons name="location-outline" size={12} /> {scenario.location}
-                </Text>
-                
-                <View style={styles.scenarioFooter}>
-                  <Text style={styles.analyzeText}>Analyze</Text>
-                  <Ionicons name="arrow-forward" size={14} color={COLORS.primary} />
-                </View>
-              </Card>
-            </TouchableOpacity>
+            />
           ))}
         </View>
 
@@ -221,54 +206,9 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: COLORS.textPrimary,
   },
-  scenariosGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  scenarioPressable: {
-    width: '48%',
-  },
-  scenarioCard: {
-    padding: 12,
+  scenariosList: {
     gap: 8,
-    height: 120,
-    justifyContent: 'space-between',
-  },
-  scenarioHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  iconCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: `${COLORS.primary}15`,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  scenarioTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: COLORS.textPrimary,
-    flex: 1,
-  },
-  scenarioLoc: {
-    fontSize: 11,
-    color: COLORS.textSecondary,
-  },
-  scenarioFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    alignSelf: 'flex-end',
-  },
-  analyzeText: {
-    fontSize: 12,
-    color: COLORS.primary,
-    fontWeight: '600',
+    marginBottom: 16,
   },
   emptyCard: {
     alignItems: 'center',
