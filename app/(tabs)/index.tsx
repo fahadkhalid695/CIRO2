@@ -1,115 +1,152 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView } from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, FlatList } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
-import { Card, Badge, Button, StatusDot, SectionHeader, AgentStep } from '../../components/ui';
+import { Card, Badge, StatusDot, SectionHeader } from '../../components/ui';
+import { useAppStore, SessionResult } from '../../lib/store';
+import { MOCK_SCENARIOS, MockScenario } from '../../lib/mock';
 
 export default function DashboardScreen() {
-  const [loading, setLoading] = useState(false);
-  const [pipelineStatus, setPipelineStatus] = useState<'idle' | 'running' | 'completed'>('idle');
+  const router = useRouter();
+  
+  // Get Zustand state
+  const { recentSessions, setActiveScenario } = useAppStore();
 
-  const triggerPipeline = () => {
-    setLoading(true);
-    setPipelineStatus('running');
-    setTimeout(() => {
-      setLoading(false);
-      setPipelineStatus('completed');
-    }, 2500);
+  const handleSelectScenario = (scenario: MockScenario) => {
+    // 1. Pre-fill state in Zustand store
+    setActiveScenario(scenario);
+    // 2. Navigate to Analysis screen
+    router.push('/analysis');
   };
 
-  const resetPipeline = () => {
-    setPipelineStatus('idle');
+  const handleSelectSession = (session: SessionResult) => {
+    // For demonstration, navigate to the simulation screen to view this session's outcome
+    router.push('/simulation');
   };
+
+  // Derive metrics
+  const activeAlerts = recentSessions.filter(s => s.severity === 'CRITICAL' || s.severity === 'HIGH').length;
+  const simulationsRun = recentSessions.length;
+  const avgResponseTime = recentSessions.length > 0 
+    ? `${Math.round(recentSessions.reduce((acc, s) => acc + parseInt(s.outcome.after.responseTime), 0) / recentSessions.length)}m` 
+    : '12m';
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container}>
-        {/* Header */}
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+        
+        {/* 1. Header */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.title}>CIRO COMMAND</Text>
-            <Text style={styles.subtitle}>Crisis Intelligence & Response Orchestrator</Text>
+            <Text style={styles.title}>CIRO</Text>
+            <Text style={styles.subtitle}>Crisis Intelligence & Response</Text>
           </View>
           <View style={styles.liveIndicator}>
-            <StatusDot status={pipelineStatus === 'running' ? 'warning' : 'ok'} size={12} />
-            <Text style={styles.liveText}>SYSTEM LIVE</Text>
+            <StatusDot status="ok" size={10} />
+            <Text style={styles.liveText}>SYSTEM ACTIVE</Text>
           </View>
         </View>
 
-        {/* Overview Stats */}
-        <SectionHeader title="Active Incident Monitor" />
-        
+        {/* 2. Quick Stats Row */}
         <View style={styles.statsGrid}>
-          <Card variant="danger" style={styles.statCard}>
-            <Text style={styles.statLabel}>SEVERITY LEVEL</Text>
-            <Text style={styles.statValue}>CRITICAL</Text>
-            <Badge label="HIGH CONFIDENCE" variant="danger" />
+          <Card style={styles.statCard} variant="neutral">
+            <Text style={styles.statLabel}>Active Alerts</Text>
+            <Text style={[styles.statValue, { color: activeAlerts > 0 ? COLORS.danger : COLORS.textPrimary }]}>
+              {activeAlerts}
+            </Text>
           </Card>
 
-          <Card variant="neutral" style={styles.statCard}>
-            <Text style={styles.statLabel}>RESPONSE AGENTS</Text>
-            <Text style={styles.statValue}>5 / 5</Text>
-            <Badge label="OPERATIONAL" variant="success" />
+          <Card style={styles.statCard} variant="neutral">
+            <Text style={styles.statLabel}>Agents Online</Text>
+            <Text style={[styles.statValue, { color: COLORS.success }]}>5/5</Text>
+          </Card>
+
+          <Card style={styles.statCard} variant="neutral">
+            <Text style={styles.statLabel}>Sims Run</Text>
+            <Text style={styles.statValue}>{simulationsRun}</Text>
+          </Card>
+
+          <Card style={styles.statCard} variant="neutral">
+            <Text style={styles.statLabel}>Avg Resp</Text>
+            <Text style={styles.statValue}>{avgResponseTime}</Text>
           </Card>
         </View>
 
-        {/* Main Control Panel */}
-        <SectionHeader title="Orchestration Pipeline" />
-        <Card variant={pipelineStatus === 'running' ? 'warning' : 'primary'} style={styles.controlCard}>
-          <Text style={styles.controlTitle}>Crisis Assessment Flow</Text>
-          <Text style={styles.controlDesc}>
-            Trigger multi-agent classification, impact analysis, action generation, and real-time execution simulation.
-          </Text>
-          
-          <View style={styles.actionButtons}>
-            {pipelineStatus === 'idle' && (
-              <Button title="Execute Full Analysis" onPress={triggerPipeline} loading={loading} />
-            )}
-            {pipelineStatus === 'running' && (
-              <Button title="Orchestrating Agents..." onPress={() => {}} loading={true} />
-            )}
-            {pipelineStatus === 'completed' && (
-              <View style={styles.completedActions}>
-                <Badge label="Pipeline Executed Successfully" variant="success" />
-                <Button title="Reset Monitor" variant="ghost" onPress={resetPipeline} style={{ marginTop: 12 }} />
-              </View>
-            )}
-          </View>
-        </Card>
+        {/* 3. Quick Scenario Section */}
+        <SectionHeader title="Quick Scenario Simulation" />
+        <View style={styles.scenariosGrid}>
+          {MOCK_SCENARIOS.map((scenario) => (
+            <TouchableOpacity 
+              key={scenario.id} 
+              onPress={() => handleSelectScenario(scenario)}
+              activeOpacity={0.8}
+              style={styles.scenarioPressable}
+            >
+              <Card variant="neutral" style={styles.scenarioCard}>
+                <View style={styles.scenarioHeader}>
+                  <View style={styles.iconCircle}>
+                    <Ionicons name={scenario.icon as any} size={20} color={COLORS.primary} />
+                  </View>
+                  <Text style={styles.scenarioTitle} numberOfLines={1}>{scenario.title}</Text>
+                </View>
+                
+                <Text style={styles.scenarioLoc} numberOfLines={1}>
+                  <Ionicons name="location-outline" size={12} /> {scenario.location}
+                </Text>
+                
+                <View style={styles.scenarioFooter}>
+                  <Text style={styles.analyzeText}>Analyze</Text>
+                  <Ionicons name="arrow-forward" size={14} color={COLORS.primary} />
+                </View>
+              </Card>
+            </TouchableOpacity>
+          ))}
+        </View>
 
-        {/* Agent Trace Steps */}
-        <SectionHeader title="Agent Processing Logs" />
-        <Card variant="neutral" style={styles.logsCard}>
-          <AgentStep 
-            name="1. Signal Ingestion Agent" 
-            iconName="cloud-download-outline" 
-            status={pipelineStatus === 'idle' ? 'pending' : 'done'} 
-            output={pipelineStatus !== 'idle' ? "Parsed 3 live streams: Social, Traffic, Weather from G-10." : undefined} 
-          />
-          <AgentStep 
-            name="2. Crisis Detector (Agent 2)" 
-            iconName="shield-outline" 
-            status={pipelineStatus === 'idle' ? 'pending' : pipelineStatus === 'running' ? 'running' : 'done'} 
-            output={pipelineStatus === 'running' ? "Running LLM classifications..." : pipelineStatus === 'completed' ? "Identified: Flash Flood in G-10. Severity HIGH." : undefined} 
-          />
-          <AgentStep 
-            name="3. Situation Analyst (Agent 3)" 
-            iconName="analytics-outline" 
-            status={pipelineStatus === 'completed' ? 'done' : pipelineStatus === 'running' ? 'running' : 'pending'} 
-            output={pipelineStatus === 'completed' ? "Impact: 2,500 residents. Key requirement: Water rescue." : undefined} 
-          />
-          <AgentStep 
-            name="4. Action Planner (Agent 4)" 
-            iconName="list-outline" 
-            status={pipelineStatus === 'completed' ? 'done' : 'pending'} 
-            output={pipelineStatus === 'completed' ? "Generated 3 response tickets: Dispatch, Broadcast, Diversion." : undefined} 
-          />
-          <AgentStep 
-            name="5. Executor Simulator (Agent 5)" 
-            iconName="play-forward-outline" 
-            status={pipelineStatus === 'completed' ? 'done' : 'pending'} 
-            output={pipelineStatus === 'completed' ? "Evacuation routes projected successfully via F-10 corridor." : undefined} 
-          />
-        </Card>
+        {/* 4. Recent Sessions Section */}
+        <SectionHeader title="Recent Sessions Log" />
+        {recentSessions.length === 0 ? (
+          <Card variant="neutral" style={styles.emptyCard}>
+            <Ionicons name="folder-open-outline" size={32} color={COLORS.textMuted} style={styles.emptyIcon} />
+            <Text style={styles.emptyText}>No recent sessions recorded.</Text>
+            <Text style={styles.emptySubtext}>Select a quick scenario above or ingest signals to begin.</Text>
+          </Card>
+        ) : (
+          <View style={styles.sessionsList}>
+            {recentSessions.map((item) => {
+              const severityVariant = 
+                item.severity === 'CRITICAL' || item.severity === 'HIGH' ? 'danger' : 
+                item.severity === 'MEDIUM' ? 'warning' : 'success';
+              
+              return (
+                <TouchableOpacity 
+                  key={item.sessionId} 
+                  onPress={() => handleSelectSession(item)}
+                  activeOpacity={0.7}
+                >
+                  <Card variant="neutral" style={styles.sessionRow}>
+                    <View style={styles.sessionMain}>
+                      <View style={styles.sessionInfo}>
+                        <Badge label={item.crisisType} variant="neutral" />
+                        <Text style={styles.sessionLocText} numberOfLines={1}>
+                          {item.location}
+                        </Text>
+                      </View>
+                      <Badge label={item.severity} variant={severityVariant} />
+                    </View>
+                    <View style={styles.sessionMeta}>
+                      <Text style={styles.sessionTime}>
+                        {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </Text>
+                      <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} />
+                    </View>
+                  </Card>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -122,32 +159,32 @@ const styles = StyleSheet.create({
   },
   container: {
     padding: 16,
-    paddingBottom: 40,
+    paddingBottom: 32,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
     paddingBottom: 16,
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '900',
     color: COLORS.textPrimary,
-    letterSpacing: 1,
+    letterSpacing: 1.5,
   },
   subtitle: {
-    fontSize: 12,
+    fontSize: 13,
     color: COLORS.textSecondary,
     marginTop: 2,
   },
   liveIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: `${COLORS.success}15`,
+    backgroundColor: `${COLORS.success}10`,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 20,
@@ -156,51 +193,133 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   liveText: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 10,
+    fontWeight: '800',
     color: COLORS.success,
+    letterSpacing: 0.5,
   },
   statsGrid: {
     flexDirection: 'row',
-    gap: 12,
+    justifyContent: 'space-between',
+    gap: 8,
     marginBottom: 8,
   },
   statCard: {
     flex: 1,
-    alignItems: 'flex-start',
-    gap: 6,
+    padding: 10,
+    alignItems: 'center',
   },
   statLabel: {
     fontSize: 10,
     color: COLORS.textSecondary,
     fontWeight: '700',
-    letterSpacing: 0.5,
+    textAlign: 'center',
+    marginBottom: 4,
   },
   statValue: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '800',
     color: COLORS.textPrimary,
   },
-  controlCard: {
+  scenariosGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
     gap: 12,
   },
-  controlTitle: {
-    fontSize: 18,
+  scenarioPressable: {
+    width: '48%',
+  },
+  scenarioCard: {
+    padding: 12,
+    gap: 8,
+    height: 120,
+    justifyContent: 'space-between',
+  },
+  scenarioHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  iconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: `${COLORS.primary}15`,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scenarioTitle: {
+    fontSize: 14,
     fontWeight: '700',
     color: COLORS.textPrimary,
+    flex: 1,
   },
-  controlDesc: {
-    fontSize: 14,
+  scenarioLoc: {
+    fontSize: 11,
     color: COLORS.textSecondary,
-    lineHeight: 20,
   },
-  actionButtons: {
-    marginTop: 8,
+  scenarioFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-end',
   },
-  completedActions: {
-    alignItems: 'stretch',
+  analyzeText: {
+    fontSize: 12,
+    color: COLORS.primary,
+    fontWeight: '600',
   },
-  logsCard: {
-    paddingVertical: 4,
+  emptyCard: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    gap: 8,
+  },
+  emptyIcon: {
+    marginBottom: 8,
+  },
+  emptyText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+  },
+  emptySubtext: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+  },
+  sessionsList: {
+    gap: 10,
+  },
+  sessionRow: {
+    padding: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  sessionMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  sessionInfo: {
+    gap: 4,
+    flex: 1,
+  },
+  sessionLocText: {
+    fontSize: 14,
+    color: COLORS.textPrimary,
+    fontWeight: '600',
+  },
+  sessionMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sessionTime: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
   },
 });
