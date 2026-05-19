@@ -19,6 +19,7 @@ const { generateWeatherData, generateTrafficData, getMockScenarios } = require('
 // Import Live Services
 const weatherService = require('./services/weatherService');
 const mapsService = require('./services/mapsService');
+const geminiService = require('./services/geminiService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -129,6 +130,77 @@ app.get('/api/maps/reverse-geocode', async (req, res) => {
     res.json({ success: true, ...location });
   } catch (error) {
     console.error('[Server] Reverse geocoding error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// =========================================================================
+// GOOGLE GEMINI 2.0 FLASH AI ENDPOINTS
+// =========================================================================
+
+// POST /api/gemini/analyze → Full situation assessment using live data
+app.post('/api/gemini/analyze', async (req, res) => {
+  try {
+    const { crisisData, weatherData, trafficData, mapsData } = req.body;
+    const analysis = await geminiService.analyzeCrisisWithLiveData(crisisData, weatherData, trafficData, mapsData);
+    res.json({ success: true, analysis });
+  } catch (error) {
+    console.error('[Server] Gemini Analysis Error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /api/gemini/stream → Real-time streaming insights via Server-Sent Events (SSE)
+app.get('/api/gemini/stream', async (req, res) => {
+  try {
+    const { location, crisisType, rain, temperature } = req.query;
+    
+    // Normalize data inputs from query parameters
+    const crisisData = {
+      location: location || 'G-10, Islamabad',
+      crisisType: crisisType || 'URBAN_FLOODING'
+    };
+    
+    const weatherData = {
+      location: location || 'G-10, Islamabad',
+      temperature: parseFloat(temperature) || 24,
+      rain: parseFloat(rain) || 0,
+      precipitation: parseFloat(rain) || 0
+    };
+    
+    await geminiService.streamInsights(crisisData, weatherData, res);
+  } catch (error) {
+    console.error('[Server] Gemini SSE Streaming Error:', error);
+    // Secure header status if stream hasn't been committed yet
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+});
+
+// POST /api/gemini/action-plan → Generate emergency plan with active Pakistani helplines
+app.post('/api/gemini/action-plan', async (req, res) => {
+  try {
+    const { situation, weatherData, nearbyServices } = req.body;
+    if (!situation) {
+      return res.status(400).json({ success: false, error: "Missing required parameters 'situation'" });
+    }
+    const plan = await geminiService.generateActionPlan(situation, weatherData, nearbyServices);
+    res.json({ success: true, plan });
+  } catch (error) {
+    console.error('[Server] Gemini Action Plan Error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/gemini/evaluate → Outcome evaluation critique
+app.post('/api/gemini/evaluate', async (req, res) => {
+  try {
+    const { before, after, actions } = req.body;
+    const evaluation = await geminiService.evaluateOutcome(before, after, actions);
+    res.json({ success: true, evaluation });
+  } catch (error) {
+    console.error('[Server] Gemini Outcome Evaluation Error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
