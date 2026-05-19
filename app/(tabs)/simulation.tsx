@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { 
   View, 
   Text, 
@@ -17,6 +17,7 @@ import { Card, Badge, Button, SectionHeader, SuccessToast } from '../../componen
 import { useAppStore } from '../../lib/store';
 
 import { MapSimulation } from '../../components/simulation/MapSimulation';
+import LiveMapView from '../../components/simulation/LiveMapView';
 
 export default function SimulationScreen() {
   const router = useRouter();
@@ -83,25 +84,117 @@ export default function SimulationScreen() {
     );
   }
 
-  // hardcoded coordinates for G-10 Islamabad
-  const mapRegion = {
-    latitude: 33.6844,
-    longitude: 73.0118,
-    latitudeDelta: 0.02,
-    longitudeDelta: 0.02,
+  // Coordinates extractor based on twin-city sector queries
+  const getCoordinates = (locName: string) => {
+    const CITY_COORDS = {
+      'islamabad': { lat: 33.6844, lng: 73.0479 },
+      'rawalpindi': { lat: 33.5651, lng: 73.0169 },
+      'lahore': { lat: 31.5204, lng: 74.3587 },
+      'karachi': { lat: 24.8607, lng: 67.0011 },
+      'peshawar': { lat: 34.0151, lng: 71.5249 },
+      'g-10': { lat: 33.6938, lng: 73.0100 },
+      'f-7': { lat: 33.7215, lng: 73.0596 },
+      'g-9': { lat: 33.7001, lng: 73.0412 },
+    };
+    const key = Object.keys(CITY_COORDS).find(k => locName?.toLowerCase().includes(k)) || 'g-10';
+    return CITY_COORDS[key as keyof typeof CITY_COORDS];
   };
 
-  const alternateRoute1 = [
-    { latitude: 33.6900, longitude: 73.0100 },
-    { latitude: 33.6915, longitude: 73.0180 },
-    { latitude: 33.6844, longitude: 73.0250 }
-  ];
+  const coords = useMemo(() => getCoordinates(currentSession?.location), [currentSession?.location]);
 
-  const alternateRoute2 = [
-    { latitude: 33.6800, longitude: 73.0020 },
-    { latitude: 33.6760, longitude: 73.0120 },
-    { latitude: 33.6844, longitude: 73.0118 }
-  ];
+  const crisisLocation = useMemo(() => ({
+    lat: coords.lat,
+    lng: coords.lng,
+    address: currentSession?.location || 'G-10, Islamabad'
+  }), [coords, currentSession?.location]);
+
+  // Extract real alternate routes from Google Directions trace
+  const alternateRoutes = useMemo(() => {
+    const optimizerTrace = currentSession?.agentTrace?.find((t: any) => t.agent.includes('Optimizer'));
+    let routes = optimizerTrace?.metadata?.adkOutput?.optimizedRoutes;
+    
+    if (!routes) {
+      const fetcherTrace = currentSession?.agentTrace?.find((t: any) => t.agent.includes('Fetcher'));
+      routes = fetcherTrace?.metadata?.adkOutput?.initialRoutes;
+    }
+    
+    if (!routes || !Array.isArray(routes)) {
+      routes = [
+        {
+          routeId: 'alt-1',
+          summary: 'F-10 Bypass (Clear)',
+          duration: '11 mins',
+          durationInTraffic: '13 mins',
+          distance: '3.8 km',
+          recommended: true,
+          polylineEncoded: 'y~q~H__tdBo@f@a@b@g@v@c@x@_@r@g@p@o@t@w@z@u@z@y@z@z@z@|@x@z@x@z@z@'
+        },
+        {
+          routeId: 'alt-2',
+          summary: 'Kashmir Highway (Slow)',
+          duration: '18 mins',
+          durationInTraffic: '24 mins',
+          distance: '5.2 km',
+          recommended: false,
+          polylineEncoded: 'y~q~H__tdB_@`@a@`@a@`@a@`@a@`@a@`@a@`@a@`@a@`@a@`@a@`@a@`@a@'
+        }
+      ];
+    }
+    // Filter out blocked corridors so they render separately
+    return routes.filter((r: any) => !r.isBlocked);
+  }, [currentSession]);
+
+  // Extract blocked route if any
+  const blockedRoute = useMemo(() => {
+    const optimizerTrace = currentSession?.agentTrace?.find((t: any) => t.agent.includes('Optimizer'));
+    const routes = optimizerTrace?.metadata?.adkOutput?.optimizedRoutes || [];
+    return routes.find((r: any) => r.isBlocked) || null;
+  }, [currentSession]);
+
+  // Extract Emergency Units from real Places API results
+  const emergencyUnits = useMemo(() => {
+    const units: any[] = [];
+    const services = currentSession?.emergencyServices;
+    if (services) {
+      if (Array.isArray(services.hospitals)) {
+        services.hospitals.slice(0, 3).forEach((h: any, idx: number) => {
+          units.push({
+            id: `hospital-${idx}`,
+            name: h.name,
+            type: 'hospital',
+            location: h.coordinates || h.location || { lat: coords.lat + 0.004, lng: coords.lng + 0.004 }
+          });
+        });
+      }
+      if (Array.isArray(services.police)) {
+        services.police.slice(0, 2).forEach((p: any, idx: number) => {
+          units.push({
+            id: `police-${idx}`,
+            name: p.name,
+            type: 'police',
+            location: p.coordinates || p.location || { lat: coords.lat - 0.004, lng: coords.lng + 0.004 }
+          });
+        });
+      }
+      if (Array.isArray(services.fireStations)) {
+        services.fireStations.slice(0, 2).forEach((f: any, idx: number) => {
+          units.push({
+            id: `fire-${idx}`,
+            name: f.name,
+            type: 'fire_station',
+            location: f.coordinates || f.location || { lat: coords.lat + 0.004, lng: coords.lng - 0.004 }
+          });
+        });
+      }
+    }
+    if (units.length === 0) {
+      units.push(
+        { id: 'hosp-1', name: 'PIMS Hospital', type: 'hospital', location: { lat: coords.lat + 0.005, lng: coords.lng + 0.005 } },
+        { id: 'pol-1', name: 'Rescue 1122 Center', type: 'ambulance', location: { lat: coords.lat - 0.004, lng: coords.lng - 0.004 } }
+      );
+    }
+    return units;
+  }, [currentSession, coords]);
 
   const beforeScore = currentSession.outcome.before.congestionScore || 9;
   const afterScore = currentSession.outcome.after.congestionScore || 3;
@@ -183,20 +276,15 @@ export default function SimulationScreen() {
 
         {/* SECTION 3: Simulated Map View */}
         <SectionHeader title="Simulation Map Corridor" />
-        <MapSimulation 
-          crisisLocation={{
-            lat: 33.6844,
-            lng: 73.0118,
-            label: currentSession.location || "G-10 Markaz"
+        <LiveMapView 
+          crisisLocation={crisisLocation}
+          alternateRoutes={alternateRoutes}
+          blockedRoute={blockedRoute}
+          emergencyUnits={emergencyUnits}
+          trafficEnabled={true}
+          onRouteSelect={(routeId) => {
+            console.log(`[Simulation Screen] User focused alternate route: ${routeId}`);
           }}
-          simulatedRoutes={[
-            { id: 'blocked-corridor', coordinates: [{ latitude: 33.6844, longitude: 73.0118 }, { latitude: 33.6850, longitude: 73.0150 }], label: 'G-10 Markaz Blocked', type: 'blocked' },
-            { id: 'alt-1', coordinates: alternateRoute1, label: 'F-10 Bypass (Clear)', type: 'alternate' },
-            { id: 'alt-2', coordinates: alternateRoute2, label: 'Kashmir Highway (Slow)', type: 'alternate' }
-          ]}
-          emergencyUnits={[
-            { id: 'R-1122', type: 'ambulance', position: { latitude: 33.6890, longitude: 73.0200 }, targetPosition: { latitude: 33.6870, longitude: 73.0150 } }
-          ]}
         />
 
         {/* SECTION 4: Emergency Tickets */}
