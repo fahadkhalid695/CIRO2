@@ -16,6 +16,9 @@ const { CIROOrchestrator, globalOrchestrationTraces } = require('./orchestration
 // Import Mock Data Generators
 const { generateWeatherData, generateTrafficData, getMockScenarios } = require('./mock/mockData');
 
+// Import Live Services
+const weatherService = require('./services/weatherService');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -33,6 +36,19 @@ app.get('/api/mock/weather', (req, res) => {
   const location = req.query.location || 'G-10, Islamabad';
   const data = generateWeatherData(location);
   res.json({ location, data });
+});
+
+// GET /api/weather/:location → Returns live weather data using Open-Meteo API
+app.get('/api/weather/:location', async (req, res) => {
+  try {
+    const { location } = req.params;
+    const data = await weatherService.getLiveWeather(location);
+    const alerts = await weatherService.getWeatherAlerts(location);
+    res.json({ success: true, ...data, alerts });
+  } catch (error) {
+    console.error(`[Server] Error fetching live weather for ${req.params.location}:`, error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 // GET /api/mock/traffic → Returns simulated traffic data
