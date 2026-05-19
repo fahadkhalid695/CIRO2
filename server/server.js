@@ -12,6 +12,7 @@ const { runSimulationExecutor } = require('./agents/simulationExecutor');
 
 // Import Google ADK Orchestrator
 const { CIROOrchestrator, globalOrchestrationTraces } = require('./orchestration/agentOrchestrator');
+const orchestrator = require('./agents/orchestrator');
 
 // Import Mock Data Generators
 const { generateWeatherData, generateTrafficData, getMockScenarios } = require('./mock/mockData');
@@ -326,6 +327,53 @@ app.post('/api/orchestrate', async (req, res) => {
   } catch (error) {
     console.error('Error in ADK Orchestrate Pipeline:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// =========================================================================
+// LIVE AGENT ORCHESTRATION PIPELINE (WEATHER, MAPS, GEOLOCATOR, PLACE API & GEMINI 2.0)
+// =========================================================================
+
+// POST /api/orchestrate/live → Runs the complete 10-step live integration pipeline
+app.post('/api/orchestrate/live', async (req, res) => {
+  try {
+    const { signals, location } = req.body;
+    if (!signals || !Array.isArray(signals)) {
+      return res.status(400).json({ success: false, error: "Missing required body parameter 'signals' (must be an array)" });
+    }
+
+    const result = await orchestrator.executeLivePipeline(signals, location);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('[Server] Live Orchestration API Error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/orchestrate/live/stream → Runs the 10-step live integration pipeline with SSE real-time updates
+app.post('/api/orchestrate/live/stream', async (req, res) => {
+  try {
+    const { signals, location } = req.body;
+    if (!signals || !Array.isArray(signals)) {
+      return res.status(400).json({ success: false, error: "Missing required body parameter 'signals' (must be an array)" });
+    }
+
+    // Set SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    console.log(`[Server] SSE Stream active. Spawning live orchestrator pipeline...`);
+
+    await orchestrator.executeLivePipeline(signals, location, (event) => {
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+    });
+
+  } catch (error) {
+    console.error('[Server] Live Orchestration Streaming Error:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, error: error.message });
+    }
   }
 });
 
