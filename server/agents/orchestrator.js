@@ -1,6 +1,6 @@
 /**
  * Live Agent Orchestrator for CIRO Platform
- * Powered by Antigravity & Google Gemini 2.0 Flash (replacing Claude).
+ * Powered by Antigravity & Google Gemini 2.0 Flash.
  * 
  * Executes a state-of-the-art 10-step crisis coordination pipeline
  * fully integrated with live Weather, Maps, Places, and Generative AI.

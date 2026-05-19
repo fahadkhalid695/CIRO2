@@ -256,7 +256,7 @@ export function AgentTraceViewer({ trace, visible, onClose }: AgentTraceViewerPr
                     )}
                   </View>
 
-                  {/* 2. REASONING STEPS (Monospace Numbered list from Claude output) */}
+                  {/* 2. REASONING STEPS (Monospace Numbered list from Gemini output) */}
                   <View style={styles.subSection}>
                     <Text style={styles.subSectionTitle}>ADK Reasoning & Intentions</Text>
                     {step.reasoning.map((point, pIdx) => (

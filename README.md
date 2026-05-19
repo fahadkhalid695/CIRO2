@@ -1,161 +1,252 @@
-# CIRO — Crisis Intelligence & Response Orchestrator
+﻿# 🌪️ CIRO: Crisis Intelligence & Response Orchestrator
 
-## Overview
-**CIRO (Crisis Intelligence & Response Orchestrator)** is a state-of-the-art multi-agent emergency mitigation and command dashboard tailored for Pakistani metropolitan hubs (such as Islamabad and Rawalpindi). The platform ingests unstructured public data feeds, weather sensors, and traffic APIs, and runs them through five highly coordinated artificial intelligence agents. By parsing local dialects (including Roman Urdu and regional English terminology), CIRO detects active metropolitan crises, calculates threatened boundaries, and generates structured mitigation plans instantly.
+![CIRO Banner](https://img.shields.io/badge/CIRO-Crisis_Management-danger?style=for-the-badge&logo=shield)
+![React Native](https://img.shields.io/badge/React_Native-Expo-blue?style=for-the-badge&logo=react)
+![Node.js](https://img.shields.io/badge/Node.js-Express-success?style=for-the-badge&logo=node.js)
+![AI Engine](https://img.shields.io/badge/AI-Google_Gemini_2.0-orange?style=for-the-badge&logo=google)
 
-At its core, CIRO provides urban emergency managers and first responders with a unified telemetry dashboard. Driven by the **Google Agent Development Kit (ADK / Antigravity Framework)** and advanced **Gemini** models, it enables interactive action plan coordination, high-fidelity traffic congestion simulation, and real-time dispatch ticketing. Designed with a premium dark-mode aesthetic, fluid micro-animations, and live route mapping, CIRO showcases how modern agentic AI can automate disaster management and save civic lives.
+CIRO is a state-of-the-art, real-time crisis tracking, predictive simulation, and incident response platform. Powered by **Google Gemini 2.0 Flash** and the custom **Antigravity Orchestrator**, CIRO unifies multi-source environmental telemetry (weather, mapped infrastructure, traffic) into a cohesive dashboard. It provides authorities and civilian users with live situational awareness, multi-agent AI pipeline analysis, automated optimal rerouting, and real-time push notification broadcasting.
 
 ---
 
-## System Architecture
+## 📑 Table of Contents
 
-Below is the conceptual architecture showing the end-to-end data flow from the mobile app down to the AI agents and high-fidelity simulation engine:
+1. [System Architecture](#-system-architecture)
+2. [Core Workflows & Diagrams](#-core-workflows--diagrams)
+3. [Features & Capabilities](#-features--capabilities)
+4. [Technology Stack](#-technology-stack)
+5. [Project Structure Mapping](#-project-structure-mapping)
+6. [Comprehensive Setup Guide](#-comprehensive-setup-guide)
+7. [API & Services Reference](#-api--services-reference)
+8. [Troubleshooting Guide](#-troubleshooting-guide)
+
+---
+
+## 🏗️ System Architecture
+
+CIRO is decoupled into two primary monolithic structures: the **Mobile Client** and the **AI Orchestration Server**.
 
 ```mermaid
 graph TD
-    subgraph Mobile Client (Expo / React Native)
-        A[Home Telemetry Screen] -->|Load Scenario / Inject Feed| B[Input Signal Panel]
-        B -->|Trigger Analysis Pipeline| C[Analysis Progress Screen]
-        E[Simulation Sandbox Map] <--|Simulate Response Actions| A
+    subgraph Client [📱 Mobile App - Expo / React Native]
+        UI[UI/UX Components]
+        State[Zustand State Store]
+        Query[React Query Cache]
+        SSE[SSE Stream Decoder]
     end
 
-    subgraph Backend Server (Node.js / Express)
-        D[REST API Endpoints] -->|POST /api/analyze| F[ADK Orchestrator: CIROOrchestrator]
+    subgraph Backend [🖥️ Node.js Express Server]
+        API[Express Router]
+        Anti[Antigravity Orchestrator]
+        Agents[Multi-Agent Handlers]
     end
 
-    subgraph Google ADK Orchestration Layer
-        F -->|Cascade Signals| G[1. Signal Normalizer Tool]
-        G -->|Normalized JSON| H[2. Crisis Detector Tool]
-        H -->|Classification & Confidence| I[3. Situation Analyst Tool]
-        I -->|Severity & STRANDED count| J[4. Action Planner Tool]
-        J -->|Mitigation Instructions| K[5. Simulation Tool]
+    subgraph External [🌐 External APIs]
+        Gemini[Google Gemini 2.0]
+        Maps[Google Maps API]
+        Weather[Open-Meteo API]
+        FCM[Firebase Cloud Messaging]
     end
 
-    subgraph Generative AI Agents (Gemini 1.5 Pro)
-        G -.->|Normalizer Prompt| L((Gemini API))
-        H -.->|Detector Prompt| L
-        I -.->|Analyst Prompt| L
-        J -.->|Planner Prompt| L
-        K -.->|Simulator Prompt| L
-    end
+    UI <-->|REST & Polling| API
+    UI <-->|ReadableStream SSE| API
+    State <--> UI
+    Query <--> UI
 
-    subgraph Output Telemetry Data
-        K -->|Traffic, SMS & Dispatch Logs| M[High-Fidelity Offline Simulator fallback]
-        M -->|Interactive Payload| E
-    end
-
-    Mobile Client --->|Fetch telemetry & preset scenarois| D
+    API <--> Anti
+    Anti <--> Agents
+    Agents <--> Gemini
+    Anti --> Maps
+    Anti --> Weather
+    API --> FCM
 ```
 
 ---
 
-## Agent Pipeline
+## 🔄 Core Workflows & Diagrams
 
-The CIRO orchestrator sequentially executes **5 specialized agents** to process raw data and simulate emergency response outcomes:
+### 1. Data Ingestion & Live Analysis Pipeline
+When a user launches a crisis analysis, CIRO triggers the Antigravity Orchestrator. This process utilizes Server-Sent Events (SSE) to stream reasoning steps chunk-by-chunk to the user interface, preventing long blocking loaders.
 
-| Agent Tool | Role & Purpose | Input | Output | System Instruction Summary |
-| :--- | :--- | :--- | :--- | :--- |
-| **1. Signal Normalizer** | Ingests, parses, and cleans chaotic telemetry or social feeds, converting local Roman Urdu dialects into standard structured English telemetry. | Unstructured signal strings (social text, raw weather APIs, traffic speeds). | Structured normalized JSON array containing sources, extracted locations, urgency ranks, and event descriptions. | *Clean inputs, parse Roman Urdu idioms (e.g., "bohat paani hai"), extract locations, standardise timestamps, and output strictly formatted JSON.* |
-| **2. Crisis Detector** | Aggregates normalized streams to determine if a severe urban emergency cluster is active. | Array of structured normalized signals. | Classification type, confidence rating (0.0 to 1.0), and core disaster explanation. | *Compare signal clusters to standard disaster categories (Flooding, Accidents, Gridlock, Heatwaves), calculate hazard confidence, and explain reasons.* |
-| **3. Situation Analyst** | Estimates localized citizen threat boundaries, population risk sectors, and impact severity. | Detected crisis classification and location parameters. | Severity index (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`), population threat description, and estimated stranded vehicle counts. | *Assess civic infrastructure limits, rank population danger indices, and output a concise situational awareness brief.* |
-| **4. Action Planner** | Synthesizes the situation report to construct structured, prioritized deployment checklists. | Structured situation report from the analyst. | List of actions with categories (`TRAFFIC`, `EMERGENCY`, `ALERT`, `RESOURCE`), priority vectors (1-5), and estimated impacts. | *Formulate high-priority rescue actions, assign categories, and generate impact scores for each deployment.* |
-| **5. Simulation Tool** | Models mock bypass routes and computes outcome score improvements after checks. | List of checked action plan mitigation items. | Alternative routing labels, dispatch tickets, dispatched SMS alerts, and before/after congestion comparison scores. | *Simulate bypass traffic channels, dispatch emergency team tasking, and predict overall percentage decreases in gridlock.* |
+```mermaid
+sequenceDiagram
+    participant App as Mobile App
+    participant Node as Node.js Backend
+    participant APIs as Telemetry APIs
+    participant Gemini as Gemini 2.0 AI
 
----
+    App->>Node: POST /api/orchestrate/live/stream (Location Data)
+    Node->>APIs: Fetch Weather & Traffic Coordinates
+    APIs-->>Node: Return Live Telemetry
+    Node->>Gemini: Init Pipeline (Signal Collection)
+    Node-->>App: SSE Chunk: Setup Complete
+    Node->>Gemini: Detect Crisis Level
+    Gemini-->>Node: Critical Severity Context
+    Node-->>App: SSE Chunk: Severity Tagged
+    Node->>Gemini: Draft Action Plan & Routing
+    Node-->>App: SSE Chunk: Actions Planned
+    Node-->>App: Connection Closed (Analysis Complete)
+    App->>App: Render Simulation Dashboard
+```
 
-## Google Antigravity & ADK Integration
+### 2. Live Simulation & Mitigation
+After analysis, the application generates a real-world simulation to demonstrate mitigation tactics.
 
-CIRO is fully orchestrated using the **Google Agent Development Kit (ADK / Antigravity)** design pattern. It enforces a strict declarative schema where agents are modeled as composite managers of modular, reusable tools:
-
-* **Integrational Architecture**: The backend registers a top-level `ADKAgent` instance (`CIROOrchestrator`) inside [agentOrchestrator.js](file:///c:/Users/dell/OneDrive/Desktop/CIRO/server/orchestration/agentOrchestrator.js). Five individual `ADKTool` objects are registered to encapsulate the low-level model prompts.
-* **Orchestration Execution**: When a client requests an evaluation at `/api/analyze`, the `CIROOrchestrator` runs its sequential pipeline loop. The output of each step is validated against input schemas and cascaded to downstream tools, collecting high-fidelity execution traces.
-* **Where to See It in Action**:
-  - **Pipeline Screen**: Tap "Run Analysis" on a scenario to watch the staggered progress bars visualising the sequential ADK pipeline executing step-by-step.
-  - **Agent Trace Viewer**: After the analysis completes, tap **"View Agent Trace"** to open a full-screen developer trace modal. This displays exact token usages, execute durations (in ms), agent reasoning paths, and raw JSON payloads for all 5 ADK tools.
-
----
-
-## Tech Stack
-
-| Technology | Layer | Description / Purpose |
-| :--- | :--- | :--- |
-| **React Native (Expo)** | Mobile Client | Premium mobile dashboard compiled to iOS and Android. |
-| **Zustand** | State Management | Centralized, synchronized application store. |
-| **Reanimated** | Visuals / Motion | Premium smooth micro-animations and metric count-ups. |
-| **Express (Node.js)** | Backend REST Server | High-performance API server managing the ADK pipeline. |
-| **Google Generative AI** | Model Engine | Ingests complex prompts using the robust `gemini-1.5-pro` model. |
-| **Google ADK** | Orchestrator Layer | Orchestrates five specialized tools into a single trace pipeline. |
+* **Blocked Route Mapping**: Queries Maps Directions API to find traffic saturation based on the AI's blocked roads.
+* **Alternate Route Mapping**: Renders safe routes away from crisis epicenters.
+* **Emergency Services Dispatch**: Connects with Google Places API to plot actual nearby hospitals, fire brigades, and police stations.
 
 ---
 
-## Setup Instructions
+## ✨ Features & Capabilities
 
-### Prerequisites
-- Install **Node.js** (v18 or higher recommended)
-- Install **Git**
-- Ensure you have **Expo Go** installed on your Android/iOS mobile device (for local deployment)
+* **Live Dashboard Environment Hub**: Built with React Query to auto-poll API health statuses, live regional weather warnings, and active crisis feeds every 5 minutes.
+* **Antigravity AI Orchestrator**: A 10-step multi-agent architecture passing context seamlessly:
+  `Signal Collector -> Situation Analyst -> Crisis Detector -> Action Planner -> Simulation Executor`
+* **Real-time SSE Decoding**: Streams massive LLM generation blocks smoothly into beautifully staggered React Native `Animated.spring` cards.
+* **Geospatial Intelligence**: Employs `react-native-maps` to draw highly specific polylines contrasting dangerous routes vs. safe evacuation routes.
 
-### Environment Variables
-Create a `.env` file in the `/server` directory:
+---
+
+## 💻 Technology Stack
+
+### Mobile Frontend
+- **Framework**: React Native, Expo, Expo Router
+- **State Management**: Zustand (Global Store), React Query (Server caching & polling)
+- **Mapping**: `react-native-maps`, Google Directions & Places
+- **Styling**: Custom Design System, React Native Animated API
+
+### Backend Server
+- **Runtime**: Node.js, Express.js
+- **Streaming Protocol**: HTTP Server-Sent Events (SSE)
+- **AI Integration**: `@google/genai` (Gemini 2.0 Flash)
+- **External Services**: Axios, Firebase Admin SDK
+
+---
+
+## 📁 Project Structure Mapping
+
+```text
+CIRO/
+├── app/                        # Expo Router Pages
+│   ├── _layout.tsx             # Root layout & QueryClientProvider
+│   └── (tabs)/                 # Main Bottom Tab Navigation
+│       ├── index.tsx           # Home Live Dashboard
+│       ├── input.tsx           # Crisis Data Entry Screen
+│       ├── analysis.tsx        # SSE Streaming Pipeline Screen
+│       └── simulation.tsx      # Routing & Evaluation Map Screen
+├── components/                 # Reusable UI Blocks
+│   ├── agents/                 # Pipeline Visualizers
+│   ├── maps/                   # Polyline and Marker Handlers
+│   ├── simulation/             # Live Route Comparison UI
+│   ├── ui/                     # Badges, Buttons, Cards, Status Dots
+│   └── weather/                # LiveWeatherCard & Rain Animations
+├── constants/                  # Colors, Layouts, Prompts
+├── lib/                        # Core Utilities
+│   ├── api/                    # Axios/Fetch clients
+│   ├── store/                  # Zustand 'useAppStore.ts'
+│   └── notifications.ts        # Expo/Firebase Push Handlers
+└── server/                     # Node.js Backend Source
+    ├── agents/                 # Antigravity Step Definitions
+    ├── config/                 # Service key mappings
+    ├── services/               # Adapters for Maps, Gemini, Weather
+    └── server.js               # Entry point
+```
+
+---
+
+## 🚀 Comprehensive Setup Guide
+
+### Phase 1: Prerequisites
+Ensure you have the following installed on your machine:
+*   [Node.js](https://nodejs.org/en/) (v18.0 or higher)
+*   [Git](https://git-scm.com/)
+*   [Expo CLI](https://docs.expo.dev/get-started/installation/) (`npm install -g expo-cli`)
+*   iOS Simulator (via Xcode) or Android Emulator (via Android Studio), OR a physical device with the **Expo Go** application installed.
+
+### Phase 2: Repository Cloning & Dependencies
+```bash
+# Clone the repository
+git clone https://github.com/your-org/ciro-platform.git
+cd ciro-platform
+
+# Install root (Frontend) dependencies
+npm install
+
+# Install backend dependencies
+cd server
+npm install
+cd ..
+```
+
+### Phase 3: Environment Setup
+CIRO requires dual environment configurations.
+
+**1. Create a `.env` in the Project Root (Frontend Variables):**
+```env
+EXPO_PUBLIC_API_BASE_URL=http://192.168.X.X:3000   # Use your machine's local IP for Expo Go!
+EXPO_PUBLIC_GEMINI_API_KEY=your_gemini_2.0_key
+EXPO_PUBLIC_GOOGLE_MAPS_API_KEY=your_maps_key
+```
+
+**2. Create a `.env` in the `/server` directory (Backend Variables):**
 ```env
 PORT=3000
-GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_API_KEY=your_gemini_2.0_key
+GOOGLE_MAPS_API_KEY=your_maps_key
+OPEN_METEO_BASE_URL=https://api.open-meteo.com/v1/forecast
+# FIREBASE_SERVICE_ACCOUNT_PATH=./config/serviceAccountKey.json # Optional for FCM
 ```
-*(If no API Key is provided, the backend automatically fails-safe to our robust offline high-fidelity mock generators so the application remains fully functional for presentation!)*
 
-### Backend Setup
-1. Open a terminal and navigate to the server folder:
-   ```bash
-   cd server
-   ```
-2. Install the necessary dependencies:
-   ```bash
-   npm install
-   ```
-3. Start the Express server:
-   ```bash
-   npm start
-   ```
-   *The console will print: `CIRO Backend Server running on http://localhost:3000`*
+### Phase 4: Boot Sequence
 
-### Mobile Setup
-1. Open a new terminal in the root project folder.
-2. Install the Expo dependencies:
-   ```bash
-   npm install
-   ```
-3. Start the mobile packager:
-   ```bash
-   npx expo start
-   ```
-4. Scan the QR code using your **Expo Go** application (Android) or the native iOS Camera app to launch the high-fidelity UI!
+**Start the Backend Server:**
+```bash
+# Open a new terminal window
+cd server
+npm start
+# Expected Output: "CIRO Engine running on port 3000"
+```
+
+**Start the Mobile Application:**
+```bash
+# Open a new terminal window in root
+npx expo start
+```
+*Press `i` in the terminal to open iOS emulator, `a` for Android, or scan the QR code with your phone via Expo Go.*
 
 ---
 
-## Presentation / Demo Guide
+## 🔌 API & Services Reference
 
-Follow these steps to deliver a high-impact demo for the judges:
+The Node.js server exposes several utilities:
 
-1. **Active Live Telemetry**: Show the initial Home screen. Highlight the live statistics cards showing "Active Alerts", "Response Latency (ms)", and "Agents Online (5/5)".
-2. **Scenario Selection**: Navigate to the **Scenarios** panel. Load **Scenario 1 (Urban Flooding — G-10 Islamabad)**. 
-3. **Inspect Inputs**: Point out the Roman Urdu dialect inputs (e.g. *"Bohat paani jama hai road par, cars stranded!"*) showing how the normalizer parses colloquial text.
-4. **Trigger ADK pipeline**: Tap **"Run Orchestrated Analysis"**. Walk the judges through the animated progress indicators as each of the 5 agents processes the data.
-5. **Inspect Agent Trace**: Tap **"View Agent Trace"**. Point out the exact duration of each tool, token consumptions, and the reasoning chain generated by the model.
-6. **Deploy Actions**: Navigate to the **Action Plan** tab. Check off the mitigation actions (e.g. *Deploy Rescue Teams, Divert Vehicles*).
-7. **Simulate Sandbox**: Tap **"Simulate Actions"**. Show the map displaying animated pulse crisis markers, alternate blue bypass routes, and active dispatch vehicle targets.
-8. **Show Outcomes**: View the comparison dashboard. Highlight the count-up indicators demonstrating a **67% decrease in congestion** and **73% response time improvement**!
+| Endpoint | Method | Purpose |
+| :--- | :--- | :--- |
+| `/api/health` | `GET` | Polled by React Query. Checks Gemini, Maps, and Weather uptime. |
+| `/api/orchestrate/live/stream`| `POST` | Core SSE endpoint. Ingests crisis payload, returns text/event-stream chunks representing the AI multi-agent 10-step progress. |
+| `/api/weather/live` | `GET` | Proxies the Open-Meteo API returning formatted degrees/flood-risks. |
+| `/api/gemini/evaluate` | `POST` | Returns a strict JSON assessment and realism score based on a simulated action outcome. |
 
 ---
 
-## APIs & Tools Used
-- **Gemini API (`gemini-1.5-pro`)**: Core reasoning engine.
-- **Expo Location & Maps**: Generates interactive coordinate sandboxes.
-- **Google ADK Framework**: Standardizes sequential tool cascading.
+## 🛠️ Troubleshooting Guide
 
-## Assumptions Made
-- Assumes metropolitan sectors in Islamabad (G-10, F-10, Faizabad) behave as self-contained traffic routing cells.
-- Assumes local first responders utilize SMS, FM radio, and digital dispatch tickets to coordinate.
+**1. Network Errors / Network Request Failed (Expo):**
+*   **Cause**: Expo cannot route `localhost` from a physical device.
+*   **Fix**: Update `EXPO_PUBLIC_API_BASE_URL` to your computer's local Wi-Fi IP address (e.g., `http://192.168.1.55:3000`).
 
-## Known Limitations
-- Offline mock fallback requires preset geographic coordinate ranges for alternate bypass polyline routes.
-- Real-time map rendering requires web/mobile internet to fetch satellite tiling packages.
+**2. Missing Maps / Blank Grey Squares:**
+*   **Cause**: Invalid or restricted Google Maps API Key.
+*   **Fix**: Ensure your Maps API Key has "Maps SDK for Android/iOS", "Places API", and "Directions API" enabled in Google Cloud Console.
+
+**3. Stream Clashing (SSE Stops Prematurely):**
+*   **Cause**: AI token limit hit or timeout.
+*   **Fix**: Ensure backend `.env` Gemini keys are valid and billing is active if you exceed the free tier limits of Gemini 2.0 Flash.
+
+**4. Port 3000 in Use:**
+*   **Cause**: Another service is occupying the backend port.
+*   **Fix**: Change `PORT=3001` in `/server/.env` and update the `EXPO_PUBLIC_API_BASE_URL` to match. 
+
+---
+*Developed for intelligent, localized emergency orchestration and rapid multi-layered response management.*
