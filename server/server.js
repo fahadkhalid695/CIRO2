@@ -21,6 +21,7 @@ const { generateWeatherData, generateTrafficData, getMockScenarios } = require('
 const weatherService = require('./services/weatherService');
 const mapsService = require('./services/mapsService');
 const geminiService = require('./services/geminiService');
+const notificationService = require('./services/notificationService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -286,7 +287,6 @@ app.post('/api/agent/simulate', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-
 // POST /api/analyze → Full pipeline powered by Google ADK Orchestrator
 app.post('/api/analyze', async (req, res) => {
   try {
@@ -296,6 +296,29 @@ app.post('/api/analyze', async (req, res) => {
     }
 
     const orchestratedData = await CIROOrchestrator.executePipeline(signals, location);
+    
+    // Automatically trigger push alerts in the background if a crisis is found
+    if (orchestratedData.detectedCrisis && orchestratedData.detectedCrisis.type !== 'NO_CRISIS') {
+      const tokens = notificationService.getTargetTokens(orchestratedData.location || location);
+      notificationService.sendCrisisAlert(tokens, {
+        type: orchestratedData.detectedCrisis.type,
+        location: orchestratedData.location || location,
+        severity: orchestratedData.severity || 'HIGH',
+        impactSummary: orchestratedData.explanation || 'Crisis detected by CIRO multi-agent consensus.',
+        sessionId: orchestratedData.sessionId
+      }).catch(e => console.error('[PushNotifications] Background crisis dispatch error:', e));
+
+      // Check if there are simulated reroutes
+      const trafficActions = (orchestratedData.actions || []).filter(a => a.category === 'TRAFFIC');
+      if (trafficActions.length > 0) {
+        notificationService.sendRouteUpdateAlert(tokens, {
+          location: orchestratedData.location || location,
+          alertReason: trafficActions[0].title,
+          routeId: trafficActions[0].id
+        }).catch(e => console.error('[PushNotifications] Background traffic dispatch error:', e));
+      }
+    }
+
     res.json(orchestratedData);
   } catch (error) {
     console.error('Error in ADK Orchestrate Pipeline via /api/analyze:', error);
@@ -343,6 +366,29 @@ app.post('/api/orchestrate/live', async (req, res) => {
     }
 
     const result = await orchestrator.executeLivePipeline(signals, location);
+
+    // Automatically trigger push alerts in the background if a crisis is found
+    if (result.detectedCrisis && result.detectedCrisis.type !== 'NO_CRISIS') {
+      const tokens = notificationService.getTargetTokens(result.location || location);
+      notificationService.sendCrisisAlert(tokens, {
+        type: result.detectedCrisis.type,
+        location: result.location || location,
+        severity: result.severity || 'HIGH',
+        impactSummary: result.explanation || 'Crisis detected by live agent consensus.',
+        sessionId: result.sessionId
+      }).catch(e => console.error('[PushNotifications] Background crisis dispatch error:', e));
+
+      // Check if there are traffic re-routes
+      const trafficActions = (result.actions || []).filter(a => a.category === 'TRAFFIC');
+      if (trafficActions.length > 0) {
+        notificationService.sendRouteUpdateAlert(tokens, {
+          location: result.location || location,
+          alertReason: trafficActions[0].title,
+          routeId: trafficActions[0].id
+        }).catch(e => console.error('[PushNotifications] Background traffic dispatch error:', e));
+      }
+    }
+
     res.json({ success: true, ...result });
   } catch (error) {
     console.error('[Server] Live Orchestration API Error:', error);
@@ -374,6 +420,70 @@ app.post('/api/orchestrate/live/stream', async (req, res) => {
     if (!res.headersSent) {
       res.status(500).json({ success: false, error: error.message });
     }
+  }
+});
+
+// =========================================================================
+// FIREBASE PUSH NOTIFICATIONS ENDPOINTS
+// =========================================================================
+
+// POST /api/notify/register
+app.post('/api/notify/register', (req, res) => {
+  try {
+    const { token, location } = req.body;
+    if (!token) {
+      return res.status(400).json({ success: false, error: 'Token is required' });
+    }
+    const success = notificationService.registerDeviceToken(token, location);
+    res.json({ success });
+  } catch (error) {
+    console.error('[Server] Token registration error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/notify/crisis
+app.post('/api/notify/crisis', async (req, res) => {
+  try {
+    const { crisisData } = req.body;
+    if (!crisisData) {
+      return res.status(400).json({ success: false, error: 'crisisData is required' });
+    }
+    const tokens = notificationService.getTargetTokens(crisisData.location);
+    const response = await notificationService.sendCrisisAlert(tokens, crisisData);
+    res.json({ success: true, response });
+  } catch (error) {
+    console.error('[Server] Crisis alert notify error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/notify/route-update
+app.post('/api/notify/route-update', async (req, res) => {
+  try {
+    const { routeData } = req.body;
+    if (!routeData) {
+      return res.status(400).json({ success: false, error: 'routeData is required' });
+    }
+    const tokens = notificationService.getTargetTokens(routeData.location);
+    const response = await notificationService.sendRouteUpdateAlert(tokens, routeData);
+    res.json({ success: true, response });
+  } catch (error) {
+    console.error('[Server] Route update notify error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/notify/resolution
+app.post('/api/notify/resolution', async (req, res) => {
+  try {
+    const { sessionId, location } = req.body;
+    const tokens = notificationService.getTargetTokens(location);
+    const response = await notificationService.sendResolutionAlert(tokens, sessionId);
+    res.json({ success: true, response });
+  } catch (error) {
+    console.error('[Server] Resolution notify error:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
