@@ -19,8 +19,9 @@ import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { COLORS } from '../../constants/colors';
 import { Card, Badge, Button, SectionHeader } from '../../components/ui';
-import { useAppStore, AnalysisSession } from '../../lib/store';
+import { useAppStore, Signal, AnalysisSession } from '../../lib/store';
 import { MOCK_SCENARIOS, MockScenario } from '../../lib/mock';
+import LiveWeatherCard, { WeatherData } from '../../components/weather/LiveWeatherCard';
 
 // Local Server URL fallback (standard Android emulator loopback / web)
 const API_BASE_URL = Platform.OS === 'android' ? 'http://10.0.2.2:3000/api' : 'http://localhost:3000/api';
@@ -35,7 +36,8 @@ export default function InputScreen() {
   const [location, setLocation] = useState('');
   const [socialSignals, setSocialSignals] = useState<string[]>(['']);
   
-  const [includeWeather, setIncludeWeather] = useState(false);
+  const [includeWeather, setIncludeWeather] = useState(true);
+  const [liveWeatherData, setLiveWeatherData] = useState<WeatherData | null>(null);
   const [rainfall, setRainfall] = useState<'none' | 'light' | 'moderate' | 'heavy' | 'extreme'>('none');
   
   const [includeTraffic, setIncludeTraffic] = useState(false);
@@ -178,19 +180,38 @@ export default function InputScreen() {
     });
 
     if (includeWeather) {
-      signalsPayload.push({
-        id: `sig-weather-${Date.now()}`,
-        type: 'weather',
-        data: {
-          location,
-          temperature: weatherData.temp,
-          humidity: weatherData.humidity,
-          rainfall,
-          alert: weatherData.alert,
-          alertType: weatherData.alert ? (rainfall === 'heavy' ? 'FLASH_FLOOD_WARNING' : 'EMERGENCY_ALERT') : 'NONE'
-        },
-        timestamp: new Date().toISOString()
-      });
+      if (liveWeatherData) {
+        signalsPayload.push({
+          id: `sig-weather-${Date.now()}`,
+          type: 'weather',
+          data: {
+            location: liveWeatherData.location,
+            temperature: liveWeatherData.temperature,
+            humidity: liveWeatherData.humidity,
+            rainfall: liveWeatherData.rainIntensity,
+            precipitation: liveWeatherData.precipitation,
+            alert: liveWeatherData.alertLevel !== 'none',
+            alertType: liveWeatherData.alerts?.[0]?.type || 'NONE',
+            floodRisk: liveWeatherData.floodRisk,
+            alertLevel: liveWeatherData.alertLevel
+          },
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        signalsPayload.push({
+          id: `sig-weather-${Date.now()}`,
+          type: 'weather',
+          data: {
+            location,
+            temperature: weatherData.temp,
+            humidity: weatherData.humidity,
+            rainfall,
+            alert: weatherData.alert,
+            alertType: weatherData.alert ? (rainfall === 'heavy' ? 'FLASH_FLOOD_WARNING' : 'EMERGENCY_ALERT') : 'NONE'
+          },
+          timestamp: new Date().toISOString()
+        });
+      }
     }
 
     if (includeTraffic) {
@@ -298,58 +319,16 @@ export default function InputScreen() {
           ))}
 
           {/* 4. Weather Ingestion Section */}
-          <View style={styles.toggleRow}>
-            <Text style={styles.toggleLabel}>Include Weather Ingestion</Text>
-            <Switch
-              value={includeWeather}
-              onValueChange={setIncludeWeather}
-              trackColor={{ false: COLORS.border, true: COLORS.primary }}
-              thumbColor={Platform.OS === 'android' ? COLORS.card : undefined}
+          <SectionHeader title="Live Meteorological Telemetry" />
+          <View style={{ marginBottom: 14 }}>
+            <LiveWeatherCard 
+              location={location || 'Islamabad'} 
+              onWeatherLoaded={(wData) => {
+                setLiveWeatherData(wData);
+                setIncludeWeather(!!wData.included);
+              }}
             />
           </View>
-
-          {includeWeather && (
-            <Card variant="neutral" style={styles.weatherCard}>
-              <Text style={styles.sectionSub}>Select Rainfall Level</Text>
-              <View style={styles.rainfallRow}>
-                {(['none', 'light', 'moderate', 'heavy', 'extreme'] as const).map((r) => (
-                  <TouchableOpacity
-                    key={r}
-                    onPress={() => setRainfall(r)}
-                    style={[
-                      styles.rainTab,
-                      rainfall === r && styles.rainTabActive
-                    ]}
-                  >
-                    <Text style={[
-                      styles.rainTabText,
-                      rainfall === r && styles.rainTabTextActive
-                    ]}>
-                      {r.toUpperCase()}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <View style={styles.weatherMetrics}>
-                <View style={styles.metricItem}>
-                  <Text style={styles.metricLabel}>Temp</Text>
-                  <Text style={styles.metricVal}>{weatherData.temp}°C</Text>
-                </View>
-                <View style={styles.metricItem}>
-                  <Text style={styles.metricLabel}>Humidity</Text>
-                  <Text style={styles.metricVal}>{weatherData.humidity}%</Text>
-                </View>
-                <View style={styles.metricItem}>
-                  <Text style={styles.metricLabel}>Alert Status</Text>
-                  <Badge 
-                    label={weatherData.alert ? 'ACTIVE ALERT' : 'NORMAL'} 
-                    variant={weatherData.alert ? 'danger' : 'success'} 
-                  />
-                </View>
-              </View>
-            </Card>
-          )}
 
           {/* 5. Traffic Ingestion Section */}
           <View style={styles.toggleRow}>
