@@ -18,6 +18,7 @@ const { generateWeatherData, generateTrafficData, getMockScenarios } = require('
 
 // Import Live Services
 const weatherService = require('./services/weatherService');
+const mapsService = require('./services/mapsService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -47,6 +48,87 @@ app.get('/api/weather/:location', async (req, res) => {
     res.json({ success: true, ...data, alerts });
   } catch (error) {
     console.error(`[Server] Error fetching live weather for ${req.params.location}:`, error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// =========================================================================
+// GOOGLE MAPS ROUTING, TRAFFIC & EMERGENCY SERVICES ENDPOINTS
+// =========================================================================
+
+// GET /api/maps/routes?from=G-10&to=Faizabad
+app.get('/api/maps/routes', async (req, res) => {
+  try {
+    const { from, to, avoidLat, avoidLng } = req.query;
+    if (!from || !to) {
+      return res.status(400).json({ success: false, error: "Missing required query parameters 'from' and 'to'" });
+    }
+    let avoidPoint = null;
+    if (avoidLat && avoidLng) {
+      avoidPoint = { lat: parseFloat(avoidLat), lng: parseFloat(avoidLng) };
+    }
+    const routes = await mapsService.getAlternateRoutes(from, to, avoidPoint);
+    res.json({ success: true, routes });
+  } catch (error) {
+    console.error('[Server] Directions routing error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /api/maps/traffic/:location
+app.get('/api/maps/traffic/:location', async (req, res) => {
+  try {
+    const { location } = req.params;
+    const conditions = await mapsService.getTrafficConditions(location);
+    res.json({ success: true, ...conditions });
+  } catch (error) {
+    console.error('[Server] Traffic check error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /api/maps/emergency-services/:type?lat=33.69&lng=73.01
+app.get('/api/maps/emergency-services/:type', async (req, res) => {
+  try {
+    const { type } = req.params;
+    const { lat, lng } = req.query;
+    if (!lat || !lng) {
+      return res.status(400).json({ success: false, error: "Missing required query parameters 'lat' and 'lng'" });
+    }
+    const services = await mapsService.getNearbyEmergencyServices(parseFloat(lat), parseFloat(lng), type);
+    res.json({ success: true, type, services });
+  } catch (error) {
+    console.error('[Server] Emergency search error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/maps/geocode { location: string }
+app.post('/api/maps/geocode', async (req, res) => {
+  try {
+    const { location } = req.body;
+    if (!location) {
+      return res.status(400).json({ success: false, error: "Missing required body parameter 'location'" });
+    }
+    const coords = await mapsService.geocodeLocation(location);
+    res.json({ success: true, ...coords });
+  } catch (error) {
+    console.error('[Server] Geocoding error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /api/maps/reverse-geocode?lat=33.69&lng=73.01
+app.get('/api/maps/reverse-geocode', async (req, res) => {
+  try {
+    const { lat, lng } = req.query;
+    if (!lat || !lng) {
+      return res.status(400).json({ success: false, error: "Missing required query parameters 'lat' and 'lng'" });
+    }
+    const location = await mapsService.reverseGeocode(parseFloat(lat), parseFloat(lng));
+    res.json({ success: true, ...location });
+  } catch (error) {
+    console.error('[Server] Reverse geocoding error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
