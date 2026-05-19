@@ -15,6 +15,7 @@ import { COLORS } from '../../constants/colors';
 import { Card, Badge, Button, SectionHeader, StatusDot, AgentStep, NetworkErrorCard, ApiErrorCard } from '../../components/ui';
 import { useAppStore } from '../../lib/store';
 import { AnalysisPipeline, AgentTraceViewer } from '../../components/agents';
+import LiveInsightsStream from '../../components/analysis/LiveInsightsStream';
 
 export default function AnalysisScreen() {
   const router = useRouter();
@@ -178,29 +179,28 @@ export default function AnalysisScreen() {
           </Card>
         </Animated.View>
 
-        {/* Collapsible AI Explanation Card */}
-        <Animated.View entering={FadeInUp.delay(400).duration(400)}>
-          <SectionHeader title="Orchestrator Explanation" />
-          <Card variant="neutral" style={styles.explanationCard}>
-            <TouchableOpacity 
-              onPress={() => setCollapsedExplanation(!collapsedExplanation)}
-              activeOpacity={0.7}
-              style={styles.explanationToggle}
-            >
-              <Text style={styles.explanationHeaderTitle}>Gemini Crisis Analysis</Text>
-              <Ionicons 
-                name={collapsedExplanation ? "chevron-down" : "chevron-up"} 
-                size={20} 
-                color={COLORS.textSecondary} 
-              />
-            </TouchableOpacity>
-
-            {!collapsedExplanation && (
-              <Animated.Text entering={FadeIn} style={styles.explanationText}>
-                {currentSession.explanation}
-              </Animated.Text>
-            )}
-          </Card>
+        {/* Gemini Live Streaming Component */}
+        <Animated.View entering={FadeInUp.delay(400).duration(400)} style={{ marginBottom: 16 }}>
+          <SectionHeader title="Gemini Live Assessment Hub" />
+          <LiveInsightsStream 
+            crisisData={{
+              crisisType: currentSession.crisisType,
+              location: currentSession.location
+            }}
+            weatherData={{
+              location: currentSession.location,
+              temperature: currentSession.liveWeather?.temperature || 24,
+              humidity: currentSession.liveWeather?.humidity,
+              rain: currentSession.liveWeather?.rain || currentSession.liveWeather?.precipitation || 0,
+              precipitation: currentSession.liveWeather?.precipitation,
+              windSpeed: currentSession.liveWeather?.windSpeed,
+              weatherDescription: currentSession.liveWeather?.weatherDescription
+            }}
+            visible={true}
+            onInsightsComplete={(insights) => {
+              console.log("[AnalysisScreen] Stream Insights Complete!", insights);
+            }}
+          />
         </Animated.View>
 
         {/* Google ADK / Antigravity Orchestrator Trace Card */}
