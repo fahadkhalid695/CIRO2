@@ -1,5 +1,5 @@
 import axios, { AxiosError, InternalAxiosRequestConfig, AxiosResponse } from 'axios';
-import { Platform } from 'react-native';
+import { Config } from '../config';
 import {
   AnalyzePayload,
   AnalysisResult,
@@ -20,9 +20,8 @@ interface CustomAxiosRequestConfig extends InternalAxiosRequestConfig {
   startTime?: number;
 }
 
-// 1. Establish base URL from environment variables, with clean fallback bounds
-const DEFAULT_URL = Platform.OS === 'android' ? 'http://10.0.2.2:3000/api' : 'http://localhost:3000/api';
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || DEFAULT_URL;
+// Use Config.apiBaseUrl which correctly resolves emulator vs physical device vs web
+const BASE_URL = `${Config.apiBaseUrl}/api`;
 
 const apiClient = axios.create({
   baseURL: BASE_URL,

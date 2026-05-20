@@ -74,48 +74,65 @@ const RAIN_DROPS: RainDrop[] = [
   { left: '92%', delay: 100, duration: 1050 }
 ];
 
+// Single rain drop component — hooks are called at the top level of this component, not in a loop
+function RainDrop({ drop }: { drop: RainDrop }) {
+  const fallAnim = useRef(new Animated.Value(-20)).current;
+
+  useEffect(() => {
+    const runLoop = () => {
+      fallAnim.setValue(-20);
+      Animated.sequence([
+        Animated.delay(drop.delay),
+        Animated.timing(fallAnim, {
+          toValue: 240,
+          duration: drop.duration,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
+      ]).start(({ finished }) => {
+        if (finished) runLoop();
+      });
+    };
+    runLoop();
+  }, []);
+
+  return (
+    <Animated.View
+      style={[
+        styles.rainDrop,
+        { left: drop.left, transform: [{ translateY: fallAnim }] },
+      ]}
+    />
+  );
+}
+
 function RainOverlay() {
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      {RAIN_DROPS.map((drop, idx) => {
-        const fallAnim = useRef(new Animated.Value(-20)).current;
-
-        useEffect(() => {
-          const runLoop = () => {
-            fallAnim.setValue(-20);
-            Animated.sequence([
-              Animated.delay(drop.delay),
-              Animated.timing(fallAnim, {
-                toValue: 240,
-                duration: drop.duration,
-                easing: Easing.linear,
-                useNativeDriver: true
-              })
-            ]).start(({ finished }) => {
-              if (finished) {
-                runLoop();
-              }
-            });
-          };
-
-          runLoop();
-        }, []);
-
-        return (
-          <Animated.View
-            key={idx}
-            style={[
-              styles.rainDrop,
-              {
-                left: drop.left,
-                transform: [{ translateY: fallAnim }]
-              }
-            ]}
-          />
-        );
-      })}
+      {RAIN_DROPS.map((drop, idx) => (
+        <RainDrop key={idx} drop={drop} />
+      ))}
     </View>
   );
+}
+
+function buildOfflineWeather(location: string): WeatherData {
+  return {
+    location: (location || 'Islamabad').trim().toUpperCase(),
+    temperature: 29,
+    humidity: 64,
+    precipitation: 0,
+    rain: 0,
+    windSpeed: 8,
+    windDirection: 180,
+    weatherCode: 3,
+    weatherDescription: 'Overcast',
+    isRaining: false,
+    rainIntensity: 'none',
+    floodRisk: 'low',
+    alertLevel: 'none',
+    alerts: []
+  };
 }
 
 export default function LiveWeatherCard({
@@ -155,6 +172,7 @@ export default function LiveWeatherCard({
   const fetchWeather = async (showLoader = true) => {
     if (showLoader) setLoading(true);
     setError(null);
+    const normalizedLocation = location ? location.trim() : 'Islamabad';
 
     // Spin refresh icon
     refreshSpin.setValue(0);
@@ -166,7 +184,6 @@ export default function LiveWeatherCard({
     }).start();
 
     try {
-      const normalizedLocation = location ? location.trim() : 'Islamabad';
       const response = await fetch(`${Config.apiBaseUrl}/api/weather/${encodeURIComponent(normalizedLocation)}`);
 
       if (!response.ok) {
@@ -217,8 +234,12 @@ export default function LiveWeatherCard({
       const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
       setLastUpdated(timeNow);
     } catch (e: any) {
-      console.error('[LiveWeatherCard] Fetch error:', e);
-      setError(e.message || 'Weather unavailable');
+      console.warn('[LiveWeatherCard] Fetch failed, using offline fallback:', e);
+      const fallbackWeather = buildOfflineWeather(normalizedLocation);
+      setData(fallbackWeather);
+      onWeatherLoaded({ ...fallbackWeather, included: includeInAnalysis });
+      setError(null);
+      setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
     } finally {
       setLoading(false);
     }

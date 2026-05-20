@@ -201,19 +201,54 @@ async function getTrafficConditions(locationName) {
 
     const { coords } = findCoordinates(locationName);
 
-    // Call snap to roads to fetch active links (used to simulate real roads interaction)
-    const roadsResponse = await mapsClient.snapToRoads({
+    // Use Directions API to get real traffic data for the location
+    const response = await mapsClient.directions({
       params: {
-        path: [`${coords.lat},${coords.lng}`, `${coords.lat + 0.002},${coords.lng + 0.002}`],
+        origin: `${coords.lat},${coords.lng}`,
+        destination: `${coords.lat + 0.01},${coords.lng + 0.01}`,
+        departure_time: 'now',
+        traffic_model: 'best_guess',
         key: process.env.GOOGLE_MAPS_API_KEY
       }
     });
 
-    console.log(`[MapsService] Roads snap successful. Analyzing traffic vectors for: ${locationName}`);
-    return getFallbackTraffic(locationName); // Real roads api requires billing, fallback for robust ratios
+    const routes = response.data.routes || [];
+    if (routes.length === 0) {
+      return getFallbackTraffic(locationName);
+    }
+
+    const leg = routes[0].legs[0];
+    const durationVal = leg.duration.value;
+    const durationTrafficVal = leg.duration_in_traffic ? leg.duration_in_traffic.value : durationVal;
+    const trafficRatio = durationTrafficVal / durationVal;
+
+    let overallCongestion = 2;
+    if (trafficRatio > 1.6) overallCongestion = 9;
+    else if (trafficRatio > 1.4) overallCongestion = 7;
+    else if (trafficRatio > 1.2) overallCongestion = 5;
+    else if (trafficRatio > 1.1) overallCongestion = 3;
+
+    const affectedRoads = leg.steps.slice(0, 3).map(step => ({
+      name: step.html_instructions.replace(/<[^>]*>/g, '').substring(0, 60),
+      speedKmh: Math.round((step.distance.value / step.duration.value) * 3.6),
+      freeFlowSpeed: 50,
+      congestionRatio: step.duration.value / (step.distance.value / (50 / 3.6))
+    }));
+
+    return {
+      location: locationName.toUpperCase(),
+      timestamp: new Date().toISOString(),
+      overallCongestion,
+      estimatedDelay: leg.duration_in_traffic
+        ? `${Math.round((durationTrafficVal - durationVal) / 60)} minutes`
+        : '0 minutes',
+      affectedRoads,
+      affectedVehicles: Math.round(overallCongestion * 40),
+      blockedSegments: overallCongestion >= 8 ? [`${locationName} main corridor heavily congested`] : []
+    };
 
   } catch (error) {
-    console.warn(`[MapsService] Roads API traffic error, using fallback: ${error.message}`);
+    console.warn(`[MapsService] Traffic API error, using fallback: ${error.message}`);
     return getFallbackTraffic(locationName);
   }
 }

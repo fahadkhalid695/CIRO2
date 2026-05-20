@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Animated, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import { Card } from './Card';
@@ -104,9 +104,6 @@ export function ApiErrorCard({ message, onRetry, onTryDemo }: ApiErrorCardProps)
     </Card>
   );
 }
-
-// Platform helper for conditional imports
-import { Platform } from 'react-native';
 
 const styles = StyleSheet.create({
   toastContainer: {

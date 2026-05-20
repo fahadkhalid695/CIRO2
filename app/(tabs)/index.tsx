@@ -1,17 +1,35 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, Animated, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Animated, ActivityIndicator, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import { Card, Badge, StatusDot, SectionHeader, ScenarioCard } from '../../components/ui';
 import { useAppStore } from '../../lib/store';
 import { PRESET_SCENARIOS, PresetScenario } from '../../lib/mock/scenarios';
+import { MapView } from '../../components/maps/MapView';
+
+
+// Scenario location coordinates
+const SCENARIO_COORDS: Record<string, { lat: number; lng: number }> = {
+  'G-10, Islamabad':       { lat: 33.6938, lng: 73.0100 },
+  'Faizabad Interchange':  { lat: 33.6633, lng: 73.0784 },
+  'Saddar, Rawalpindi':    { lat: 33.5980, lng: 73.0551 },
+  'F-7, Islamabad':        { lat: 33.7215, lng: 73.0596 },
+};
+
+const CRISIS_COLORS: Record<string, string> = {
+  'Urban Flooding':    '#3B82F6',
+  'Road Accident':     '#EF4444',
+  'Extreme Heatwave':  '#F59E0B',
+  'Power Grid Failure':'#8B5CF6',
+};
 
 export default function DashboardScreen() {
   const router = useRouter();
   
   // Get Zustand state
-  const { recentSessions, loadPresetScenario, demoMode, setDemoMode } = useAppStore();
+  const { recentSessions, currentSession, loadPresetScenario, demoMode, setDemoMode } = useAppStore();
 
   const [showSplash, setShowSplash] = useState(true);
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -58,6 +76,43 @@ export default function DashboardScreen() {
     // For demonstration, navigate to the simulation screen to view this session's outcome comparison
     router.push('/simulation');
   };
+
+  const getCoordsForLocation = (location?: string) => {
+    const lower = (location || '').toLowerCase();
+    if (lower.includes('faizabad')) return { lat: 33.6633, lng: 73.0784 };
+    if (lower.includes('saddar')) return { lat: 33.5936, lng: 73.0520 };
+    if (lower.includes('f-7')) return { lat: 33.7215, lng: 73.0596 };
+    if (lower.includes('g-10')) return { lat: 33.6938, lng: 73.0100 };
+    if (lower.includes('rawalpindi')) return { lat: 33.5651, lng: 73.0169 };
+    return { lat: 33.6844, lng: 73.0479 };
+  };
+
+  const mapMarkers = [
+    { id: 'user-loc', latitude: 33.6844, longitude: 73.0479, title: 'Your Location (Device)', description: 'Command Center' },
+    ...PRESET_SCENARIOS.map((scen) => {
+      const coords = getCoordsForLocation(scen.location);
+      return { id: scen.id, latitude: coords.lat, longitude: coords.lng, title: scen.title, description: scen.location };
+    }),
+    ...recentSessions.slice(0, 5).map((session) => {
+      const coords = getCoordsForLocation(session.location);
+      return {
+        id: `session-${session.sessionId}`,
+        latitude: coords.lat,
+        longitude: coords.lng,
+        title: `${session.crisisType || 'Session'} · ${session.severity || 'ACTIVE'}`,
+        description: session.location,
+      };
+    }),
+    ...(currentSession
+      ? [{
+          id: `current-${currentSession.sessionId}`,
+          latitude: getCoordsForLocation(currentSession.location).lat,
+          longitude: getCoordsForLocation(currentSession.location).lng,
+          title: `Current ${currentSession.crisisType || 'Session'}`,
+          description: currentSession.location,
+        }]
+      : []),
+  ];
 
   // Derive metrics
   const activeAlerts = recentSessions.filter(s => s.severity === 'CRITICAL' || s.severity === 'HIGH').length;
@@ -154,6 +209,19 @@ export default function DashboardScreen() {
             </TouchableOpacity>
           </View>
         </Card>
+
+        {/* 2.7 Live Operations Map */}
+        <SectionHeader title="Live Operations Map" />
+        <View style={{ marginBottom: 20, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: COLORS.border }}>
+          <MapView
+            latitude={33.6844}
+            longitude={73.0479}
+            latitudeDelta={0.15}
+            longitudeDelta={0.15}
+            markers={mapMarkers}
+            style={{ width: '100%', height: 200 }}
+          />
+        </View>
 
         {/* 3. Quick Scenario Section */}
         <SectionHeader title="Quick Scenario Simulation" />

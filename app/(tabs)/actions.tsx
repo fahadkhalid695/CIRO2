@@ -4,12 +4,12 @@ import {
   Text, 
   StyleSheet, 
   ScrollView, 
-  SafeAreaView, 
   TouchableOpacity,
   FlatList,
   Platform,
   ActivityIndicator
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Swipeable, RectButton } from 'react-native-gesture-handler';
@@ -18,28 +18,51 @@ import { COLORS } from '../../constants/colors';
 import { Card, Badge, Button, SectionHeader, SkeletonCard } from '../../components/ui';
 import { useAppStore, AnalysisSession } from '../../lib/store';
 
-// Local Server URL fallback
-const API_BASE_URL = Platform.OS === 'android' ? 'http://10.0.2.2:3000/api' : 'http://localhost:3000/api';
+import { Config } from '../../lib/config';
+
+function normalizeActions(session: any): any[] {
+  if (!session || !Array.isArray(session.actions)) return [];
+  return session.actions;
+}
+
+function normalizeSimulationSession(session: any) {
+  if (!session) return null;
+
+  const simulation = session.simulation || {};
+  return {
+    ...session,
+    simulation: {
+      ...simulation,
+      simulatedRoutes: simulation.simulatedRoutes || simulation.routes || [],
+      routes: simulation.routes || simulation.simulatedRoutes || [],
+      emergencyTickets: simulation.emergencyTickets || simulation.tickets || [],
+      tickets: simulation.tickets || simulation.emergencyTickets || [],
+      sentAlerts: simulation.sentAlerts || simulation.alerts || [],
+      alerts: simulation.alerts || simulation.sentAlerts || [],
+      systemLogs: simulation.systemLogs || simulation.logs || [],
+      logs: simulation.logs || simulation.systemLogs || [],
+    },
+  };
+}
 
 export default function ActionsScreen() {
   const router = useRouter();
   
   // Zustand Store Integration
-  const { currentSession } = useAppStore();
+  const { currentSession, activeScenario, demoMode } = useAppStore();
+  const resolvedSession = normalizeSimulationSession(currentSession || (demoMode ? activeScenario?.precomputedSession : null));
 
   // Local States
   const [actionsList, setActionsList] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'ALL' | 'TRAFFIC' | 'EMERGENCY' | 'ALERT' | 'RESOURCE'>('ALL');
   const [loading, setLoading] = useState(false);
 
-  // Sync with current session
+  // Sync with current session or demo preset session
   useEffect(() => {
-    if (currentSession && currentSession.actions) {
-      setActionsList(currentSession.actions);
-    }
-  }, [currentSession]);
+    setActionsList(normalizeActions(resolvedSession));
+  }, [resolvedSession]);
 
-  if (!currentSession) {
+  if (!resolvedSession) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.emptyContainer}>
@@ -65,24 +88,26 @@ export default function ActionsScreen() {
   const resourceCount = actionsList.filter(a => a.category === 'RESOURCE').length;
 
   const handleToggleSimulated = (id: string) => {
-    if (!currentSession) return;
-    const updatedActions = currentSession.actions.map(action => 
+    if (!resolvedSession) return;
+    const updatedActions = actionsList.map(action => 
       action.id === id ? { ...action, simulated: !action.simulated } : action
     );
+    setActionsList(updatedActions);
     useAppStore.setState({
       currentSession: {
-        ...currentSession,
+        ...resolvedSession,
         actions: updatedActions
       }
     });
   };
 
   const handleDismissAction = (id: string) => {
-    if (!currentSession) return;
-    const updatedActions = currentSession.actions.filter(action => action.id !== id);
+    if (!resolvedSession) return;
+    const updatedActions = actionsList.filter(action => action.id !== id);
+    setActionsList(updatedActions);
     useAppStore.setState({
       currentSession: {
-        ...currentSession,
+        ...resolvedSession,
         actions: updatedActions
       }
     });
@@ -91,22 +116,34 @@ export default function ActionsScreen() {
   const handleSimulateAll = async () => {
     setLoading(true);
     try {
+      if (demoMode) {
+        // Simulate a small network delay for realism before transitioning
+        await new Promise(resolve => setTimeout(resolve, 800));
+        setLoading(false);
+        router.push('/simulation');
+        return;
+      }
+
       // 1. Call Agent 5 REST endpoint
-      const response = await axios.post(`${API_BASE_URL}/agent/simulate`, {
+      const response = await axios.post(`${Config.apiBaseUrl}/api/agent/simulate`, {
         actions: actionsList
       });
 
       // 2. Wrap simulated updates into Zustand active session
       const updatedSession: AnalysisSession = {
-        ...currentSession,
+        ...(resolvedSession as AnalysisSession),
         simulation: {
           simulatedRoutes: response.data.simulation.simulatedRoutes ? response.data.simulation.simulatedRoutes.map((r: any) => `${r.name} (${r.status} - Congestion: ${r.congestionScore}/10)`) : [],
+          routes: response.data.simulation.simulatedRoutes ? response.data.simulation.simulatedRoutes.map((r: any) => `${r.name} (${r.status} - Congestion: ${r.congestionScore}/10)`) : [],
           sentAlerts: response.data.simulation.sentAlerts ? response.data.simulation.sentAlerts.map((a: any) => `[${a.channel}] ${a.message} (Target: ${a.audienceSize} people)`) : [],
+          alerts: response.data.simulation.sentAlerts ? response.data.simulation.sentAlerts.map((a: any) => `[${a.channel}] ${a.message} (Target: ${a.audienceSize} people)`) : [],
           emergencyTickets: response.data.simulation.emergencyTickets ? response.data.simulation.emergencyTickets.map((t: any) => `${t.ticketId}: ${t.subject} [${t.status}]`) : [],
+          tickets: response.data.simulation.emergencyTickets ? response.data.simulation.emergencyTickets.map((t: any) => `${t.ticketId}: ${t.subject} [${t.status}]`) : [],
           systemLogs: response.data.simulation.systemLogs ? response.data.simulation.systemLogs.map((l: any) => ({ time: l.time, message: `[${l.level}] ${l.message}` })) : [],
-          outcome: response.data.simulation.outcome || currentSession.outcome
+          logs: response.data.simulation.systemLogs ? response.data.simulation.systemLogs.map((l: any) => ({ time: l.time, message: `[${l.level}] ${l.message}` })) : [],
+          outcome: response.data.simulation.outcome || resolvedSession.outcome
         },
-        outcome: response.data.simulation.outcome || currentSession.outcome
+        outcome: response.data.simulation.outcome || resolvedSession.outcome
       };
 
       // Push updated session back to Zustand store
@@ -116,38 +153,46 @@ export default function ActionsScreen() {
       });
 
       // Navigate to Simulation tab
+      setLoading(false);
       router.push('/simulation');
     } catch (error) {
-      console.warn("Backend simulator failed or offline, launching high-fidelity local response outcome...", error);
-
-      // Offline mock fallback matching requested schema
+      // Offline/demo fallback — use precomputed simulation if available
+      const existingSim = resolvedSession?.simulation;
       const fallbackSession: AnalysisSession = {
-        ...currentSession,
+        ...(resolvedSession as AnalysisSession),
         simulation: {
-          simulatedRoutes: [
-            "F-10 bypass is CLEAR (Congestion: 1/10)",
-            "G-10 double road is BLOCKED (Congestion: 10/10)",
-            "Kashmir highway corridor has SLOW FLOW (Congestion: 6/10)"
-          ],
-          sentAlerts: [
-            "[SMS] URGENT: High water logging in G-10. Evacuate via F-10 corridors (Target: 4,500 residents)",
-            "[RADIO] FM 101 Broadcast alert: Divert traffic away from G-10 markaz"
-          ],
-          emergencyTickets: [
-            "TKT-1029: Rescue Boat Deployment [DISPATCHED]",
-            "TKT-1030: Emergency Water Pump installation [OPEN]"
-          ],
-          systemLogs: [
-            { time: new Date().toISOString(), message: "[INFO] Evacuation plan active" },
-            { time: new Date().toISOString(), message: "[WARNING] Rescue delays due to gridlock on Expressway" }
-          ],
-          outcome: {
-            before: { congestionScore: currentSession?.outcome?.before?.congestionScore || 9, responseTime: "45 mins", affectedVehicles: currentSession?.outcome?.before?.affectedVehicles || 340 },
+          simulatedRoutes: existingSim?.simulatedRoutes?.length
+            ? existingSim.simulatedRoutes
+            : [
+                "F-10 bypass is CLEAR (Congestion: 1/10)",
+                "G-10 double road is BLOCKED (Congestion: 10/10)",
+                "Kashmir highway corridor has SLOW FLOW (Congestion: 6/10)"
+              ],
+          sentAlerts: existingSim?.sentAlerts?.length
+            ? existingSim.sentAlerts
+            : [
+                "[SMS] URGENT: High water logging in G-10. Evacuate via F-10 corridors (Target: 4,500 residents)",
+                "[RADIO] FM 101 Broadcast alert: Divert traffic away from G-10 markaz"
+              ],
+          emergencyTickets: existingSim?.emergencyTickets?.length
+            ? existingSim.emergencyTickets
+            : [
+                "TKT-1029: Rescue Boat Deployment [DISPATCHED]",
+                "TKT-1030: Emergency Water Pump installation [OPEN]"
+              ],
+          systemLogs: existingSim?.systemLogs?.length
+            ? existingSim.systemLogs
+            : [
+                { time: new Date().toISOString(), message: "[INFO] Evacuation plan active" },
+                { time: new Date().toISOString(), message: "[WARNING] Rescue delays due to gridlock on Expressway" }
+              ],
+          outcome: existingSim?.outcome || {
+            before: { congestionScore: resolvedSession?.outcome?.before?.congestionScore || 9, responseTime: "45 mins", affectedVehicles: resolvedSession?.outcome?.before?.affectedVehicles || 340 },
             after: { congestionScore: 3, responseTime: "12 mins", affectedVehicles: 15 }
           }
         },
-        outcome: {
-          before: { congestionScore: currentSession?.outcome?.before?.congestionScore || 9, responseTime: "45 mins", affectedVehicles: currentSession?.outcome?.before?.affectedVehicles || 340 },
+        outcome: existingSim?.outcome || resolvedSession?.outcome || {
+          before: { congestionScore: 9, responseTime: "45 mins", affectedVehicles: 340 },
           after: { congestionScore: 3, responseTime: "12 mins", affectedVehicles: 15 }
         }
       };
@@ -157,6 +202,7 @@ export default function ActionsScreen() {
         currentSession: fallbackSession,
         sessions: [fallbackSession, ...useAppStore.getState().sessions.filter(s => s.sessionId !== fallbackSession.sessionId)]
       });
+      setLoading(false);
       router.push('/simulation');
     } finally {
       setLoading(false);
@@ -205,7 +251,7 @@ export default function ActionsScreen() {
               <Text style={styles.title}>Response Plan</Text>
               <Text style={styles.subtitle}>Drafted emergency tasks</Text>
             </View>
-            <Badge label={currentSession.crisisType} variant="neutral" />
+            <Badge label={resolvedSession.crisisType} variant="neutral" />
           </View>
 
           {/* 2. Summary bar */}
@@ -337,7 +383,7 @@ export default function ActionsScreen() {
 
           {/* 5. Simulate All Actions Button */}
           <Button 
-            title="Simulate All Actions →" 
+            title="Simulate All Actions" 
             onPress={handleSimulateAll} 
             loading={loading}
             style={styles.simulateButton}

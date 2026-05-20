@@ -4,12 +4,12 @@ import {
   Text, 
   StyleSheet, 
   ScrollView, 
-  SafeAreaView, 
   TouchableOpacity,
   Platform,
   Clipboard,
   Alert
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
@@ -19,23 +19,44 @@ import { useAppStore } from '../../lib/store';
 import { MapSimulation } from '../../components/simulation/MapSimulation';
 import LiveMapView from '../../components/simulation/LiveMapView';
 
+function normalizeSession(session: any) {
+  if (!session) return null;
+
+  const simulation = session.simulation || {};
+  return {
+    ...session,
+    simulation: {
+      ...simulation,
+      simulatedRoutes: simulation.simulatedRoutes || simulation.routes || [],
+      routes: simulation.routes || simulation.simulatedRoutes || [],
+      emergencyTickets: simulation.emergencyTickets || simulation.tickets || [],
+      tickets: simulation.tickets || simulation.emergencyTickets || [],
+      sentAlerts: simulation.sentAlerts || simulation.alerts || [],
+      alerts: simulation.alerts || simulation.sentAlerts || [],
+      systemLogs: simulation.systemLogs || simulation.logs || [],
+      logs: simulation.logs || simulation.systemLogs || [],
+    },
+  };
+}
+
 export default function SimulationScreen() {
   const router = useRouter();
   
   // Zustand Store
-  const { currentSession } = useAppStore();
+  const { currentSession, activeScenario, demoMode } = useAppStore();
+  const resolvedSession = normalizeSession(currentSession || (demoMode ? activeScenario?.precomputedSession : null));
 
   // Local references and states
   const logScrollViewRef = useRef<ScrollView>(null);
   const [toastVisible, setToastVisible] = useState(false);
 
   useEffect(() => {
-    if (currentSession) {
+    if (resolvedSession) {
       // Small timeout to let screen transition finish before dropping the premium toast
       const t = setTimeout(() => setToastVisible(true), 250);
       return () => clearTimeout(t);
     }
-  }, [currentSession]);
+  }, [resolvedSession]);
 
   useEffect(() => {
     // Auto-scroll logs to bottom if they load
@@ -44,11 +65,11 @@ export default function SimulationScreen() {
         logScrollViewRef.current?.scrollToEnd({ animated: true });
       }, 500);
     }
-  }, [currentSession]);
+  }, [resolvedSession]);
 
   const handleCopyLogs = () => {
-    if (!currentSession) return;
-    const logString = currentSession.simulation.systemLogs
+    if (!resolvedSession) return;
+    const logString = (resolvedSession.simulation.systemLogs || [])
       .map((log: { time: string; message: string }) => `[${new Date(log.time).toLocaleTimeString()}] ${log.message}`)
       .join('\n');
     Clipboard.setString(logString);
@@ -65,7 +86,7 @@ export default function SimulationScreen() {
     router.push('/input');
   };
 
-  if (!currentSession) {
+  if (!resolvedSession) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.emptyContainer}>
@@ -100,25 +121,33 @@ export default function SimulationScreen() {
     return CITY_COORDS[key as keyof typeof CITY_COORDS];
   };
 
-  const coords = useMemo(() => getCoordinates(currentSession?.location), [currentSession?.location]);
+  const coords = useMemo(() => getCoordinates(resolvedSession?.location), [resolvedSession?.location]);
 
   const crisisLocation = useMemo(() => ({
     lat: coords.lat,
     lng: coords.lng,
-    address: currentSession?.location || 'G-10, Islamabad'
-  }), [coords, currentSession?.location]);
+    address: resolvedSession?.location || 'G-10, Islamabad'
+  }), [coords, resolvedSession?.location]);
 
   // Extract real alternate routes from Google Directions trace
   const alternateRoutes = useMemo(() => {
-    const optimizerTrace = currentSession?.agentTrace?.find((t: any) => t.agent.includes('Optimizer'));
+    const optimizerTrace = resolvedSession?.agentTrace?.find((t: any) => t.agent.includes('Optimizer'));
     let routes = optimizerTrace?.metadata?.adkOutput?.optimizedRoutes;
     
     if (!routes) {
-      const fetcherTrace = currentSession?.agentTrace?.find((t: any) => t.agent.includes('Fetcher'));
+      const fetcherTrace = resolvedSession?.agentTrace?.find((t: any) => t.agent.includes('Fetcher'));
       routes = fetcherTrace?.metadata?.adkOutput?.initialRoutes;
     }
+
+    // Also check top-level simulation routes from the live pipeline
+    if (!routes || !Array.isArray(routes) || routes.length === 0) {
+      const liveRoutes = (resolvedSession as any)?.simulation?.routes || (resolvedSession as any)?.simulation?.simulatedRoutes;
+      if (Array.isArray(liveRoutes) && liveRoutes.length > 0 && liveRoutes[0]?.polylineEncoded) {
+        routes = liveRoutes;
+      }
+    }
     
-    if (!routes || !Array.isArray(routes)) {
+    if (!routes || !Array.isArray(routes) || routes.length === 0) {
       routes = [
         {
           routeId: 'alt-1',
@@ -140,21 +169,27 @@ export default function SimulationScreen() {
         }
       ];
     }
-    // Filter out blocked corridors so they render separately
-    return routes.filter((r: any) => !r.isBlocked);
-  }, [currentSession]);
+
+    // Ensure every route has the `recommended` field and filter blocked ones
+    const withRecommended = routes.map((r: any, idx: number) => ({
+      ...r,
+      recommended: r.recommended ?? (idx === 0 && !r.isBlocked),
+    }));
+
+    return withRecommended.filter((r: any) => !r.isBlocked);
+  }, [resolvedSession]);
 
   // Extract blocked route if any
   const blockedRoute = useMemo(() => {
-    const optimizerTrace = currentSession?.agentTrace?.find((t: any) => t.agent.includes('Optimizer'));
+    const optimizerTrace = resolvedSession?.agentTrace?.find((t: any) => t.agent.includes('Optimizer'));
     const routes = optimizerTrace?.metadata?.adkOutput?.optimizedRoutes || [];
     return routes.find((r: any) => r.isBlocked) || null;
-  }, [currentSession]);
+  }, [resolvedSession]);
 
   // Extract Emergency Units from real Places API results
   const emergencyUnits = useMemo(() => {
     const units: any[] = [];
-    const services = currentSession?.emergencyServices;
+    const services = resolvedSession?.emergencyServices;
     if (services) {
       if (Array.isArray(services.hospitals)) {
         services.hospitals.slice(0, 3).forEach((h: any, idx: number) => {
@@ -162,7 +197,7 @@ export default function SimulationScreen() {
             id: `hospital-${idx}`,
             name: h.name,
             type: 'hospital',
-            location: h.coordinates || h.location || { lat: coords.lat + 0.004, lng: coords.lng + 0.004 }
+            location: h.coordinates || h.location || (h.lat ? { lat: h.lat, lng: h.lng } : { lat: coords.lat + 0.004, lng: coords.lng + 0.004 })
           });
         });
       }
@@ -172,7 +207,7 @@ export default function SimulationScreen() {
             id: `police-${idx}`,
             name: p.name,
             type: 'police',
-            location: p.coordinates || p.location || { lat: coords.lat - 0.004, lng: coords.lng + 0.004 }
+            location: p.coordinates || p.location || (p.lat ? { lat: p.lat, lng: p.lng } : { lat: coords.lat - 0.004, lng: coords.lng + 0.004 })
           });
         });
       }
@@ -182,7 +217,7 @@ export default function SimulationScreen() {
             id: `fire-${idx}`,
             name: f.name,
             type: 'fire_station',
-            location: f.coordinates || f.location || { lat: coords.lat + 0.004, lng: coords.lng - 0.004 }
+            location: f.coordinates || f.location || (f.lat ? { lat: f.lat, lng: f.lng } : { lat: coords.lat + 0.004, lng: coords.lng - 0.004 })
           });
         });
       }
@@ -194,10 +229,29 @@ export default function SimulationScreen() {
       );
     }
     return units;
-  }, [currentSession, coords]);
+  }, [resolvedSession, coords]);
 
-  const beforeScore = currentSession.outcome.before.congestionScore || 9;
-  const afterScore = currentSession.outcome.after.congestionScore || 3;
+  if (!resolvedSession) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.emptyContainer}>
+          <Ionicons name="desktop-outline" size={64} color={COLORS.textMuted} />
+          <Text style={styles.emptyTitle}>Simulation Control Room</Text>
+          <Text style={styles.emptySubtitle}>
+            No active simulation trace available. Plan and execute actions to run the outcome simulator.
+          </Text>
+          <Button 
+            title="Go to Signal Input" 
+            onPress={() => router.push('/input')} 
+            style={styles.emptyBtn}
+          />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const beforeScore = resolvedSession.outcome.before.congestionScore || 9;
+  const afterScore = resolvedSession.outcome.after.congestionScore || 3;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -222,7 +276,7 @@ export default function SimulationScreen() {
           <View style={styles.timestampRow}>
             <Ionicons name="time-outline" size={13} color={COLORS.textSecondary} />
             <Text style={styles.timestampText}>
-              Executed: {new Date(currentSession.timestamp).toLocaleTimeString()} ({new Date(currentSession.timestamp).toLocaleDateString()})
+              Executed: {new Date(resolvedSession.timestamp).toLocaleTimeString()} ({new Date(resolvedSession.timestamp).toLocaleDateString()})
             </Text>
           </View>
         </Card>
@@ -251,9 +305,9 @@ export default function SimulationScreen() {
           <Card variant="neutral" style={styles.metricCard}>
             <Text style={styles.metricHeaderLabel}>Evac Response Time</Text>
             <View style={styles.comparisonRow}>
-              <Text style={[styles.valBefore, { color: COLORS.danger }]}>{currentSession.outcome.before.responseTime}</Text>
+              <Text style={[styles.valBefore, { color: COLORS.danger }]}>{resolvedSession.outcome.before.responseTime}</Text>
               <Ionicons name="arrow-forward" size={16} color={COLORS.textSecondary} />
-              <Text style={[styles.valAfter, { color: COLORS.success }]}>{currentSession.outcome.after.responseTime}</Text>
+              <Text style={[styles.valAfter, { color: COLORS.success }]}>{resolvedSession.outcome.after.responseTime}</Text>
             </View>
             <Text style={styles.reductionLabel}>
               <Ionicons name="trending-down" size={12} color={COLORS.success} /> 73% faster arrival
@@ -264,12 +318,12 @@ export default function SimulationScreen() {
           <Card variant="neutral" style={styles.metricCard}>
             <Text style={styles.metricHeaderLabel}>Stranded Motorists</Text>
             <View style={styles.comparisonRow}>
-              <Text style={[styles.valBefore, { color: COLORS.danger }]}>{currentSession.outcome.before.affectedVehicles}</Text>
+              <Text style={[styles.valBefore, { color: COLORS.danger }]}>{resolvedSession.outcome.before.affectedVehicles}</Text>
               <Ionicons name="arrow-forward" size={16} color={COLORS.textSecondary} />
-              <Text style={[styles.valAfter, { color: COLORS.success }]}>{currentSession.outcome.after.affectedVehicles}</Text>
+              <Text style={[styles.valAfter, { color: COLORS.success }]}>{resolvedSession.outcome.after.affectedVehicles}</Text>
             </View>
             <Text style={styles.reductionLabel}>
-              <Ionicons name="people" size={12} color={COLORS.success} /> {currentSession.outcome.before.affectedVehicles - currentSession.outcome.after.affectedVehicles} vehicles clear
+              <Ionicons name="people" size={12} color={COLORS.success} /> {resolvedSession.outcome.before.affectedVehicles - resolvedSession.outcome.after.affectedVehicles} vehicles clear
             </Text>
           </Card>
         </View>
@@ -289,13 +343,13 @@ export default function SimulationScreen() {
 
         {/* SECTION 4: Emergency Tickets */}
         <SectionHeader title="Generated Dispatch Tickets" />
-        {currentSession.simulation.emergencyTickets.length === 0 ? (
+        {(resolvedSession.simulation.emergencyTickets || []).length === 0 ? (
           <Card variant="neutral" style={styles.emptyRow}>
             <Text style={styles.emptyText}>No dispatch tickets generated.</Text>
           </Card>
         ) : (
           <View style={styles.ticketsList}>
-            {currentSession.simulation.emergencyTickets.map((t: string, idx: number) => {
+            {(resolvedSession.simulation.emergencyTickets || []).map((t: string, idx: number) => {
               const [id, ...rest] = t.split(': ');
               const details = rest.join(': ');
               return (
@@ -317,13 +371,13 @@ export default function SimulationScreen() {
 
         {/* SECTION 5: Sent Alerts */}
         <SectionHeader title="Simulated Alerts Dispatched" />
-        {currentSession.simulation.sentAlerts.length === 0 ? (
+        {(resolvedSession.simulation.sentAlerts || []).length === 0 ? (
           <Card variant="neutral" style={styles.emptyRow}>
             <Text style={styles.emptyText}>No emergency alerts dispatched.</Text>
           </Card>
         ) : (
           <View style={styles.alertsList}>
-            {currentSession.simulation.sentAlerts.map((alert: string, idx: number) => {
+            {(resolvedSession.simulation.sentAlerts || []).map((alert: string, idx: number) => {
               const icon = alert.includes('SMS') ? 'phone-portrait-outline' : 'radio-outline';
               return (
                 <Card key={idx} variant="neutral" style={styles.alertRow}>
@@ -357,10 +411,10 @@ export default function SimulationScreen() {
             contentContainerStyle={styles.terminalContent}
             nestedScrollEnabled
           >
-            {currentSession.simulation.systemLogs.length === 0 ? (
+            {(resolvedSession.simulation.systemLogs || []).length === 0 ? (
               <Text style={styles.terminalLine}>[00:00:00] [SYSTEM] Ready to execute simulation trace...</Text>
             ) : (
-              currentSession.simulation.systemLogs.map((log: { time: string; message: string }, idx: number) => (
+              (resolvedSession.simulation.systemLogs || []).map((log: { time: string; message: string }, idx: number) => (
                 <Text key={idx} style={styles.terminalLine}>
                   [{new Date(log.time).toLocaleTimeString()}] {log.message}
                 </Text>

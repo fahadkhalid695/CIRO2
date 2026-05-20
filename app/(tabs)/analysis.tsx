@@ -3,12 +3,12 @@ import {
   ActivityIndicator,
   Animated,
   ScrollView,
-  SafeAreaView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
@@ -91,6 +91,34 @@ type PipelineResult = {
   };
 };
 
+function normalizeSessionSnapshot(session: any): PipelineResult | null {
+  if (!session) return null;
+
+  const simulation = session.simulation || {};
+  const routes = simulation.routes || simulation.simulatedRoutes || [];
+  const alerts = simulation.alerts || simulation.sentAlerts || [];
+  const tickets = simulation.tickets || simulation.emergencyTickets || [];
+  const logs = simulation.logs || simulation.systemLogs || [];
+
+  return {
+    ...session,
+    simulation: {
+      ...simulation,
+      routes,
+      simulatedRoutes: simulation.simulatedRoutes || routes,
+      alerts,
+      sentAlerts: simulation.sentAlerts || alerts,
+      tickets,
+      emergencyTickets: simulation.emergencyTickets || tickets,
+      logs,
+      systemLogs: simulation.systemLogs || logs,
+    },
+    liveWeather: session.liveWeather || session.weather || {},
+    liveTraffic: session.liveTraffic || session.traffic || {},
+    emergencyServices: session.emergencyServices || session.services || {},
+  } as PipelineResult;
+}
+
 const UI_STEPS: Array<Omit<PipelineStep, 'status' | 'statusText' | 'durationMs' | 'startedAt' | 'completedAt' | 'input' | 'output' | 'liveDataFetched' | 'summary'>> = [
   { id: 1, backendId: 1, title: 'Signal Collection', subtitle: 'Input signals summary, signal count, and types', source: 'google' },
   { id: 2, backendId: 2, title: 'Live Weather Fetch', subtitle: 'Fetching from Open-Meteo with temperature, rain, and flood risk', source: 'live_api' },
@@ -159,6 +187,7 @@ export default function AnalysisScreen() {
   const router = useRouter();
   const {
     currentSession,
+    activeScenario,
     currentSignals,
     currentLocation,
     isAnalyzing,
@@ -190,7 +219,12 @@ export default function AnalysisScreen() {
     return trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`;
   }, []);
 
-  const activeSession = (pipelineResult || currentSession) as any | null;
+  const demoSession = demoMode ? activeScenario?.precomputedSession : null;
+  const activeSession = useMemo(
+    () => normalizeSessionSnapshot(pipelineResult || currentSession || demoSession),
+    [currentSession, demoSession, pipelineResult]
+  );
+  const isShowingResults = !isAnalyzing && activeSession !== null;
   const progressCount = useMemo(() => pipelineSteps.filter((step) => step.status === 'completed').length, [pipelineSteps]);
   const progressLabel = `${progressCount}/10 steps complete`;
 
@@ -351,8 +385,10 @@ export default function AnalysisScreen() {
         const result = event.data as PipelineResult;
         setPipelineResult(result);
         setAnalysisComplete(result as any);
+        // Trigger results animation directly here — the useEffect watching resultsVisible
+        // would fire a second time, so we set the flag and skip the useEffect animation
         setResultsVisible(true);
-        setTimeout(() => animateResultsIn(), 30);
+        animateResultsIn();
         useAppStore.setState({ isAnalyzing: false, analysisStep: 0, currentSignals: [] });
       }
     },
@@ -461,9 +497,21 @@ export default function AnalysisScreen() {
 
   useEffect(() => {
     if (resultsVisible) {
+      resultsOpacity.setValue(0);
+      resultsTranslateY.setValue(18);
       animateResultsIn();
     }
-  }, [animateResultsIn, resultsVisible]);
+  }, [animateResultsIn, resultsVisible, resultsOpacity, resultsTranslateY]);
+
+  // For demo mode: when analysis completes (isAnalyzing goes false with a session),
+  // trigger the results animation since pipeline_done never fires in demo mode
+  useEffect(() => {
+    if (!isAnalyzing && activeSession && demoMode) {
+      if (!resultsVisible) {
+        setResultsVisible(true);
+      }
+    }
+  }, [activeSession, isAnalyzing, demoMode, resultsVisible]);
 
   useEffect(() => {
     if (scrollRef.current && isAnalyzing && !demoMode) {
@@ -625,7 +673,7 @@ export default function AnalysisScreen() {
     );
   }
 
-  if (!activeSession) {
+  if (!activeSession && !isAnalyzing) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.emptyContainer}>
@@ -648,15 +696,16 @@ export default function AnalysisScreen() {
   const traffic = session.liveTraffic || {};
   const weatherLabel = `${weather.temperature ?? 'n/a'}°C · ${weather.rain ?? 0}mm rain · flood risk ${weather.floodRisk || 'unknown'}`;
   const trafficLabel = `${traffic.overallCongestion ?? 'n/a'}/10 congestion · ${traffic.affectedRoads?.length || 0} affected roads`;
-  const liveRoutes = session.simulation?.routes || [];
+  const liveRoutes = session.simulation?.routes || session.simulation?.simulatedRoutes || [];
   const emergencyServices = session.emergencyServices || {};
+  const simulationLogs = session.simulation?.logs || session.simulation?.systemLogs || [];
   const serviceCount =
     (emergencyServices.hospitals?.length || 0) + (emergencyServices.police?.length || 0) + (emergencyServices.fireStations?.length || 0);
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        <Animated.View style={[styles.resultsWrap, { opacity: resultsOpacity, transform: [{ translateY: resultsTranslateY }] }]}>
+        <Animated.View style={[styles.resultsWrap, { opacity: isShowingResults ? resultsOpacity : 1, transform: [{ translateY: isShowingResults ? resultsTranslateY : 0 }] }]}>
           <View style={styles.resultsHeader}>
             <View style={styles.headerTopRow}>
               <View>
@@ -724,9 +773,47 @@ export default function AnalysisScreen() {
             <Text style={styles.resultLine}>Emergency locations found: {serviceCount}</Text>
           </Card>
 
+          {/* Agent Trace Summary */}
+          {session.agentTrace && (session.agentTrace as any[]).length > 0 && (
+            <>
+              <SectionHeader title="Agent Pipeline Trace" />
+              <Card variant="neutral" style={styles.resultsCard}>
+                {(session.agentTrace as any[]).map((trace: any, idx: number) => (
+                  <View key={idx} style={styles.traceRow}>
+                    <View style={[styles.traceDot, { backgroundColor: trace.status === 'completed' ? COLORS.success : COLORS.danger }]} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.traceAgent}>{trace.agent}</Text>
+                      {trace.durationMs && (
+                        <Text style={styles.traceDuration}>{trace.durationMs}ms</Text>
+                      )}
+                    </View>
+                    <Badge label={trace.status === 'completed' ? 'DONE' : trace.status.toUpperCase()} variant={trace.status === 'completed' ? 'success' : 'danger'} />
+                  </View>
+                ))}
+              </Card>
+            </>
+          )}
+
+          {simulationLogs.length > 0 && (
+            <>
+              <SectionHeader title="Simulation Logs" />
+              <Card variant="neutral" style={styles.resultsCard}>
+                {(simulationLogs as any[]).slice(0, 6).map((log: any, idx: number) => (
+                  <View key={idx} style={styles.traceRow}>
+                    <View style={[styles.traceDot, { backgroundColor: COLORS.primary }]} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.traceAgent}>{log.message || log}</Text>
+                      {log.time ? <Text style={styles.traceDuration}>{new Date(log.time).toLocaleTimeString()}</Text> : null}
+                    </View>
+                  </View>
+                ))}
+              </Card>
+            </>
+          )}
+
           <View style={styles.actionRow}>
-            <Button title="View Live Map →" onPress={handleViewLiveMap} style={styles.actionBtn} />
-            <Button title="View Action Plan →" onPress={handleViewActionPlan} variant="ghost" style={styles.actionBtn} />
+            <Button title="View Live Map" onPress={handleViewLiveMap} style={styles.actionBtn} />
+            <Button title="View Action Plan" onPress={handleViewActionPlan} variant="ghost" style={styles.actionBtn} />
           </View>
         </Animated.View>
       </ScrollView>
@@ -1014,5 +1101,28 @@ const styles = StyleSheet.create({
   },
   actionBtn: {
     flex: 1,
+  },
+  traceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  traceDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  traceAgent: {
+    color: COLORS.textPrimary,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  traceDuration: {
+    color: COLORS.textSecondary,
+    fontSize: 11,
+    marginTop: 1,
   },
 });

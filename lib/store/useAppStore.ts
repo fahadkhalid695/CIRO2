@@ -228,14 +228,35 @@ export const useAppStore = create<AppState>((set, get) => ({
         await delay(1200);
 
         // Pre-computed Scenario Session Fallback
-        const demoSession = activeScenario && activeScenario.precomputedSession 
-          ? activeScenario.precomputedSession 
+        const rawSession = activeScenario && activeScenario.precomputedSession
+          ? activeScenario.precomputedSession
           : genericSimulatedSession;
 
+        // Ensure the session has all required AnalysisSession fields
+        const demoSession: AnalysisSession = {
+          sessionId: rawSession.sessionId || `session-${Date.now()}`,
+          timestamp: rawSession.timestamp || new Date().toISOString(),
+          location: rawSession.location || currentLocation,
+          crisisType: rawSession.crisisType || 'URBAN_FLOODING',
+          normalizedSignals: rawSession.normalizedSignals || currentSignals,
+          detectedCrisis: rawSession.detectedCrisis || {
+            type: rawSession.crisisType || 'URBAN_FLOODING',
+            location: rawSession.location || currentLocation,
+            confidence: 0.94,
+            reasoning: rawSession.explanation || 'Crisis detected from signal analysis.'
+          },
+          severity: rawSession.severity || 'HIGH',
+          explanation: rawSession.explanation || '',
+          actions: rawSession.actions || genericSimulatedSession.actions,
+          simulation: rawSession.simulation || genericSimulatedSession.simulation,
+          outcome: rawSession.outcome || genericSimulatedSession.outcome,
+          agentTrace: rawSession.agentTrace || genericSimulatedSession.agentTrace,
+        };
+
         set((state) => ({
-          currentSession: demoSession as any,
-          sessions: [demoSession, ...state.sessions] as any,
-          recentSessions: [demoSession, ...state.recentSessions] as any,
+          currentSession: demoSession,
+          sessions: [demoSession, ...state.sessions],
+          recentSessions: [demoSession, ...state.recentSessions],
           isAnalyzing: false,
           analysisStep: 0,
           currentSignals: []

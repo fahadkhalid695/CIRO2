@@ -1,6 +1,5 @@
-import React, { useEffect } from 'react';
-import { View, StyleSheet } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, withSequence } from 'react-native-reanimated';
+import React, { useEffect, useRef } from 'react';
+import { View, StyleSheet, Animated } from 'react-native';
 import { COLORS } from '../../constants/colors';
 
 interface StatusDotProps {
@@ -9,28 +8,22 @@ interface StatusDotProps {
 }
 
 export function StatusDot({ status = 'ok', size = 10 }: StatusDotProps) {
-  const opacity = useSharedValue(0.4);
+  const opacity = useRef(new Animated.Value(0.4)).current;
 
   useEffect(() => {
-    opacity.value = withRepeat(
-      withSequence(
-        withTiming(1, { duration: 800 }),
-        withTiming(0.4, { duration: 800 })
-      ),
-      -1, // infinite
-      true // reverse
-    );
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 1, duration: 800, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.4, duration: 800, useNativeDriver: true }),
+      ])
+    ).start();
   }, []);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-  }));
 
   const getColor = () => {
     switch (status) {
       case 'critical': return COLORS.danger;
       case 'warning': return COLORS.warning;
-      case 'ok': return COLORS.success;
+      case 'ok':
       default: return COLORS.success;
     }
   };
@@ -42,8 +35,7 @@ export function StatusDot({ status = 'ok', size = 10 }: StatusDotProps) {
       <Animated.View
         style={[
           styles.pulse,
-          animatedStyle,
-          { backgroundColor: color, borderRadius: size / 2 }
+          { backgroundColor: color, borderRadius: size / 2, opacity },
         ]}
       />
       <View style={[styles.core, { backgroundColor: color, borderRadius: size / 2 }]} />
@@ -63,5 +55,5 @@ const styles = StyleSheet.create({
   core: {
     width: '70%',
     height: '70%',
-  }
+  },
 });

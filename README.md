@@ -1,252 +1,418 @@
-﻿# 🌪️ CIRO: Crisis Intelligence & Response Orchestrator
+# CIRO: Crisis Intelligence & Response Orchestrator
 
-![CIRO Banner](https://img.shields.io/badge/CIRO-Crisis_Management-danger?style=for-the-badge&logo=shield)
-![React Native](https://img.shields.io/badge/React_Native-Expo-blue?style=for-the-badge&logo=react)
-![Node.js](https://img.shields.io/badge/Node.js-Express-success?style=for-the-badge&logo=node.js)
-![AI Engine](https://img.shields.io/badge/AI-Google_Gemini_2.0-orange?style=for-the-badge&logo=google)
+CIRO is a crisis intelligence platform built with Expo, React Native, Zustand, Express, Google Maps services, and Google Gemini. It turns raw emergency reports into a guided response flow with live analysis, route planning, map visualization, and simulation outcomes.
 
-CIRO is a state-of-the-art, real-time crisis tracking, predictive simulation, and incident response platform. Powered by **Google Gemini 2.0 Flash** and the custom **Antigravity Orchestrator**, CIRO unifies multi-source environmental telemetry (weather, mapped infrastructure, traffic) into a cohesive dashboard. It provides authorities and civilian users with live situational awareness, multi-agent AI pipeline analysis, automated optimal rerouting, and real-time push notification broadcasting.
+You can run it in two ways:
 
----
+- Demo mode for offline walkthroughs with preset scenarios.
+- Live mode for a streamed 10-step orchestration pipeline powered by backend services.
 
-## 📑 Table of Contents
+## Quick Start
 
-1. [System Architecture](#-system-architecture)
-2. [Core Workflows & Diagrams](#-core-workflows--diagrams)
-3. [Features & Capabilities](#-features--capabilities)
-4. [Technology Stack](#-technology-stack)
-5. [Project Structure Mapping](#-project-structure-mapping)
-6. [Comprehensive Setup Guide](#-comprehensive-setup-guide)
-7. [API & Services Reference](#-api--services-reference)
-8. [Troubleshooting Guide](#-troubleshooting-guide)
+If you only want the fastest path:
 
----
+1. Install dependencies.
+2. Start the backend on port `3000`.
+3. Start Expo.
+4. Open the Input screen and load a preset scenario.
+5. Review Analysis, Actions, and Simulation in sequence.
 
-## 🏗️ System Architecture
+## Choose Your Path
 
-CIRO is decoupled into two primary monolithic structures: the **Mobile Client** and the **AI Orchestration Server**.
+### Demo Walkthrough
+
+Use this when you want a reliable, presentation-ready flow.
+
+1. Open the Home tab.
+2. Toggle Demo mode if it is not already enabled.
+3. Pick a scenario from Quick Scenario Simulation.
+4. The Input tab is prefilled with signals and location.
+5. The Analysis tab shows the 5-step visual pipeline and a generated summary.
+6. The Actions tab shows the response plan.
+7. The Simulation tab shows routes, alerts, tickets, logs, and map guidance.
+
+### Live Analysis
+
+Use this when you want the backend to fetch and synthesize real telemetry.
+
+1. Enter or load signals in the Input tab.
+2. Keep Demo mode off.
+3. Start analysis.
+4. Watch the SSE-backed pipeline stream through the Analysis tab.
+5. Open Actions to simulate the plan.
+6. Open Simulation to inspect evacuation routes and outcomes.
+
+## What The App Does
+
+- Ingests social, weather, and traffic signals.
+- Detects the likely crisis type and severity.
+- Generates response actions for emergency services, traffic control, alerts, and resources.
+- Simulates the effect of the response plan.
+- Renders evacuation and reroute guidance on maps.
+- Shows recent sessions and crisis markers on the home dashboard.
+
+## Screen Guide
+
+### Home
+
+The home dashboard is the control room. It shows live status, demo state, quick scenario cards, and a map that marks preset scenarios and recent sessions.
+
+### Input
+
+This is where you enter a location and signal data or load a preset scenario. It is the start of both demo and live workflows.
+
+### Analysis
+
+This screen visualizes the pipeline. In demo mode it uses the precomputed scenario result; in live mode it listens to the backend stream and displays each stage as it completes.
+
+### Actions
+
+This screen shows the response plan. You can mark actions as simulated, dismiss them, or run the full simulation.
+
+### Simulation
+
+This screen shows the route map, blocked corridor, emergency service locations, alert output, dispatch tickets, and execution logs.
+
+## Demo vs Live Workflows
+
+### Demo Workflow
+
+Demo mode is deterministic and safe for offline walkthroughs.
+
+1. A preset scenario is loaded from `lib/mock/scenarios.ts`.
+2. The app normalizes the preset session into the shared session shape.
+3. The Analysis tab renders the precomputed session and summary.
+4. The Actions tab shows the preset action list.
+5. The Simulation tab shows the preset outcome, logs, and routes.
+
+### Live Workflow
+
+Live mode uses the backend orchestration flow.
+
+1. The client posts signals to `/api/orchestrate/live/stream`.
+2. The backend streams step events while resolving weather, maps, AI analysis, and emergency services.
+3. The action planner produces a prioritized response plan.
+4. The simulation executor evaluates route and response outcomes.
+5. The client renders the final result on the map and in the session summary.
+
+## Workflow Diagrams
+
+### Demo Scenario Flow
 
 ```mermaid
-graph TD
-    subgraph Client [📱 Mobile App - Expo / React Native]
-        UI[UI/UX Components]
-        State[Zustand State Store]
-        Query[React Query Cache]
-        SSE[SSE Stream Decoder]
-    end
-
-    subgraph Backend [🖥️ Node.js Express Server]
-        API[Express Router]
-        Anti[Antigravity Orchestrator]
-        Agents[Multi-Agent Handlers]
-    end
-
-    subgraph External [🌐 External APIs]
-        Gemini[Google Gemini 2.0]
-        Maps[Google Maps API]
-        Weather[Open-Meteo API]
-        FCM[Firebase Cloud Messaging]
-    end
-
-    UI <-->|REST & Polling| API
-    UI <-->|ReadableStream SSE| API
-    State <--> UI
-    Query <--> UI
-
-    API <--> Anti
-    Anti <--> Agents
-    Agents <--> Gemini
-    Anti --> Maps
-    Anti --> Weather
-    API --> FCM
+flowchart TD
+  A[Select preset scenario] --> B[Load demo session]
+  B --> C[Normalize session shape]
+  C --> D[Render Analysis tab]
+  D --> E[Render Actions tab]
+  E --> F[Render Simulation tab]
+  F --> G[Show routes, alerts, and map guidance]
 ```
 
----
+### Live Orchestration Flow
 
-## 🔄 Core Workflows & Diagrams
+```mermaid
+flowchart TD
+  A[User submits signals] --> B[POST /api/orchestrate/live/stream]
+  B --> C[Signal Collector]
+  C --> D[Weather + Maps lookups]
+  D --> E[Crisis Detector]
+  E --> F[Gemini analysis]
+  F --> G[Action Planner]
+  G --> H[Simulation Executor]
+  H --> I[Client updates Analysis]
+  I --> J[Client updates Actions]
+  J --> K[Client updates Simulation map]
+```
 
-### 1. Data Ingestion & Live Analysis Pipeline
-When a user launches a crisis analysis, CIRO triggers the Antigravity Orchestrator. This process utilizes Server-Sent Events (SSE) to stream reasoning steps chunk-by-chunk to the user interface, preventing long blocking loaders.
+### SSE Update Lifecycle
 
 ```mermaid
 sequenceDiagram
-    participant App as Mobile App
-    participant Node as Node.js Backend
-    participant APIs as Telemetry APIs
-    participant Gemini as Gemini 2.0 AI
+  participant UI as Expo app
+  participant API as Express SSE route
+  participant ORCH as Live orchestrator
 
-    App->>Node: POST /api/orchestrate/live/stream (Location Data)
-    Node->>APIs: Fetch Weather & Traffic Coordinates
-    APIs-->>Node: Return Live Telemetry
-    Node->>Gemini: Init Pipeline (Signal Collection)
-    Node-->>App: SSE Chunk: Setup Complete
-    Node->>Gemini: Detect Crisis Level
-    Gemini-->>Node: Critical Severity Context
-    Node-->>App: SSE Chunk: Severity Tagged
-    Node->>Gemini: Draft Action Plan & Routing
-    Node-->>App: SSE Chunk: Actions Planned
-    Node-->>App: Connection Closed (Analysis Complete)
-    App->>App: Render Simulation Dashboard
+  UI->>API: POST /api/orchestrate/live/stream
+  API->>ORCH: Start pipeline
+  ORCH-->>API: data: step-start events
+  ORCH-->>API: data: step-complete events
+  ORCH-->>API: data: final result
+  API-->>UI: Stream chunk
+  UI->>UI: Map backend steps to screen state
 ```
 
-### 2. Live Simulation & Mitigation
-After analysis, the application generates a real-world simulation to demonstrate mitigation tactics.
+### Notification Delivery Flow
 
-* **Blocked Route Mapping**: Queries Maps Directions API to find traffic saturation based on the AI's blocked roads.
-* **Alternate Route Mapping**: Renders safe routes away from crisis epicenters.
-* **Emergency Services Dispatch**: Connects with Google Places API to plot actual nearby hospitals, fire brigades, and police stations.
-
----
-
-## ✨ Features & Capabilities
-
-* **Live Dashboard Environment Hub**: Built with React Query to auto-poll API health statuses, live regional weather warnings, and active crisis feeds every 5 minutes.
-* **Antigravity AI Orchestrator**: A 10-step multi-agent architecture passing context seamlessly:
-  `Signal Collector -> Situation Analyst -> Crisis Detector -> Action Planner -> Simulation Executor`
-* **Real-time SSE Decoding**: Streams massive LLM generation blocks smoothly into beautifully staggered React Native `Animated.spring` cards.
-* **Geospatial Intelligence**: Employs `react-native-maps` to draw highly specific polylines contrasting dangerous routes vs. safe evacuation routes.
-
----
-
-## 💻 Technology Stack
-
-### Mobile Frontend
-- **Framework**: React Native, Expo, Expo Router
-- **State Management**: Zustand (Global Store), React Query (Server caching & polling)
-- **Mapping**: `react-native-maps`, Google Directions & Places
-- **Styling**: Custom Design System, React Native Animated API
-
-### Backend Server
-- **Runtime**: Node.js, Express.js
-- **Streaming Protocol**: HTTP Server-Sent Events (SSE)
-- **AI Integration**: `@google/genai` (Gemini 2.0 Flash)
-- **External Services**: Axios, Firebase Admin SDK
-
----
-
-## 📁 Project Structure Mapping
-
-```text
-CIRO/
-├── app/                        # Expo Router Pages
-│   ├── _layout.tsx             # Root layout & QueryClientProvider
-│   └── (tabs)/                 # Main Bottom Tab Navigation
-│       ├── index.tsx           # Home Live Dashboard
-│       ├── input.tsx           # Crisis Data Entry Screen
-│       ├── analysis.tsx        # SSE Streaming Pipeline Screen
-│       └── simulation.tsx      # Routing & Evaluation Map Screen
-├── components/                 # Reusable UI Blocks
-│   ├── agents/                 # Pipeline Visualizers
-│   ├── maps/                   # Polyline and Marker Handlers
-│   ├── simulation/             # Live Route Comparison UI
-│   ├── ui/                     # Badges, Buttons, Cards, Status Dots
-│   └── weather/                # LiveWeatherCard & Rain Animations
-├── constants/                  # Colors, Layouts, Prompts
-├── lib/                        # Core Utilities
-│   ├── api/                    # Axios/Fetch clients
-│   ├── store/                  # Zustand 'useAppStore.ts'
-│   └── notifications.ts        # Expo/Firebase Push Handlers
-└── server/                     # Node.js Backend Source
-    ├── agents/                 # Antigravity Step Definitions
-    ├── config/                 # Service key mappings
-    ├── services/               # Adapters for Maps, Gemini, Weather
-    └── server.js               # Entry point
+```mermaid
+flowchart TD
+  A[Critical event detected] --> B[Build notification payload]
+  B --> C[notificationService]
+  C --> D[Firebase Admin / push provider]
+  D --> E[Device tokens]
+  E --> F[User receives alert]
+  F --> G[App opens related session]
+  G --> H[Map shows route and evacuation guidance]
 ```
 
----
+### Response Plan To Map Flow
 
-## 🚀 Comprehensive Setup Guide
+```mermaid
+flowchart TD
+  A[Action planner output] --> B[Route optimizer]
+  B --> C[Emergency service lookup]
+  C --> D[Simulation executor]
+  D --> E[Session stores routes and alerts]
+  E --> F[Simulation screen renders map overlays]
+  F --> G[User sees evacuation directions]
+```
 
-### Phase 1: Prerequisites
-Ensure you have the following installed on your machine:
-*   [Node.js](https://nodejs.org/en/) (v18.0 or higher)
-*   [Git](https://git-scm.com/)
-*   [Expo CLI](https://docs.expo.dev/get-started/installation/) (`npm install -g expo-cli`)
-*   iOS Simulator (via Xcode) or Android Emulator (via Android Studio), OR a physical device with the **Expo Go** application installed.
+## 10-Step Live Agent Pipeline
 
-### Phase 2: Repository Cloning & Dependencies
+The live backend pipeline is implemented in `server/agents/orchestrator.js`.
+
+1. Signal Collector - normalizes raw social and telemetry inputs.
+2. Weather Fetcher - retrieves weather data and flood or heat risk signals.
+3. Maps Fetcher - queries traffic conditions and route options.
+4. Crisis Detector - classifies the likely crisis and confidence.
+5. Gemini Analyst - generates a richer incident narrative.
+6. Situation Analyst - synthesizes severity, explanation, and impact.
+7. Action Planner - creates prioritized response actions.
+8. Maps Route Optimizer - identifies bypass and evacuation corridors.
+9. Emergency Services Locator - finds hospitals, police, and fire stations.
+10. Simulation Executor - evaluates the mitigation outcome.
+
+The app still keeps a simplified 5-step visual pipeline for demo presentation, but the live backend is the full 10-step flow.
+
+## Interactive Examples
+
+### Example 1: Urban Flooding Demo
+
+1. Load the G-10 flooding scenario on the Home tab.
+2. Open Input and confirm the social reports and heavy rain signal.
+3. Open Analysis and inspect the crisis summary.
+4. Open Actions to review rescue, diversion, alert, and resource tasks.
+5. Open Simulation to inspect blocked roads, bypass routes, and outcome reduction.
+
+### Example 2: Road Accident Demo
+
+1. Load the Faizabad scenario.
+2. Review the actions assigned to emergency and traffic control.
+3. Open Simulation to compare alternate routes and responder locations.
+
+### Example 3: Live Crisis Run
+
+1. Turn Demo mode off.
+2. Enter location and live signals.
+3. Start analysis and wait for the stream.
+4. When the session completes, jump from Analysis to Actions to Simulation.
+
+## System Architecture
+
+```mermaid
+graph TD
+  subgraph Client[Expo / React Native App]
+    Home[Home Dashboard]
+    Input[Signal Input]
+    Analysis[Analysis Screen]
+    Actions[Actions Screen]
+    Simulation[Simulation Screen]
+    Store[Zustand Store]
+    MapUI[Map Components]
+  end
+
+  subgraph Server[Express Backend]
+    API[REST + SSE Routes]
+    LivePipeline[10-Step Live Orchestrator]
+    SimulationExecutor[Simulation Executor]
+    ActionPlanner[Action Planner]
+    MapsSvc[Maps Service]
+    WeatherSvc[Weather Service]
+    GeminiSvc[Gemini Service]
+  end
+
+  subgraph External[External Services]
+    Gemini[Google Gemini]
+    Maps[Google Maps APIs]
+    Weather[Open-Meteo]
+  end
+
+  Home --> Store
+  Input --> Store
+  Analysis --> Store
+  Actions --> Store
+  Simulation --> Store
+  Analysis --> API
+  Actions --> API
+  Simulation --> MapUI
+  API --> LivePipeline
+  LivePipeline --> WeatherSvc
+  LivePipeline --> MapsSvc
+  LivePipeline --> GeminiSvc
+  WeatherSvc --> Weather
+  MapsSvc --> Maps
+  GeminiSvc --> Gemini
+```
+
+## Tech Stack
+
+### Mobile
+
+- Expo 54
+- React Native 0.81
+- Expo Router
+- Zustand
+- React Native Maps
+- React Native Gesture Handler
+- Expo Notifications
+- TanStack Query
+
+### Backend
+
+- Node.js
+- Express
+- SSE for streaming pipeline updates
+- Google Generative AI SDK
+- Google Maps Services SDK
+- Open-Meteo integration
+- Firebase Admin for notifications
+
+## Data Model Notes
+
+- Demo and live sessions are normalized to support `routes` and `simulatedRoutes`.
+- Alerts are read from both `alerts` and `sentAlerts`.
+- Logs are read from both `logs` and `systemLogs`.
+- The home map shows both preset scenario markers and recent session markers.
+- The simulation map shows evacuation guidance, not just summary text.
+
+## Setup Guide
+
+### Prerequisites
+
+- Node.js 18 or newer
+- npm
+- Android emulator, iOS simulator, or a physical device with Expo Go
+- Google Maps API key for live routing and places
+- Gemini API key for live AI responses
+
+### Install Dependencies
+
+From the project root:
+
 ```bash
-# Clone the repository
-git clone https://github.com/your-org/ciro-platform.git
-cd ciro-platform
-
-# Install root (Frontend) dependencies
 npm install
-
-# Install backend dependencies
 cd server
 npm install
 cd ..
 ```
 
-### Phase 3: Environment Setup
-CIRO requires dual environment configurations.
+### Environment Variables
 
-**1. Create a `.env` in the Project Root (Frontend Variables):**
+Create a root `.env` file:
+
 ```env
-EXPO_PUBLIC_API_BASE_URL=http://192.168.X.X:3000   # Use your machine's local IP for Expo Go!
-EXPO_PUBLIC_GEMINI_API_KEY=your_gemini_2.0_key
-EXPO_PUBLIC_GOOGLE_MAPS_API_KEY=your_maps_key
+EXPO_PUBLIC_API_BASE_URL=http://localhost:3000
+EXPO_PUBLIC_GOOGLE_MAPS_API_KEY=your_google_maps_key
+EXPO_PUBLIC_GEMINI_API_KEY=your_gemini_key
 ```
 
-**2. Create a `.env` in the `/server` directory (Backend Variables):**
+Create `server/.env`:
+
 ```env
 PORT=3000
-GEMINI_API_KEY=your_gemini_2.0_key
-GOOGLE_MAPS_API_KEY=your_maps_key
-OPEN_METEO_BASE_URL=https://api.open-meteo.com/v1/forecast
-# FIREBASE_SERVICE_ACCOUNT_PATH=./config/serviceAccountKey.json # Optional for FCM
+GEMINI_API_KEY=your_gemini_key
+GOOGLE_MAPS_API_KEY=your_google_maps_key
 ```
 
-### Phase 4: Boot Sequence
+If you use a physical phone, replace `localhost` with your computer's LAN IP.
 
-**Start the Backend Server:**
+### Run The App
+
+Backend:
+
 ```bash
-# Open a new terminal window
-cd server
+npm run server
+```
+
+Expo:
+
+```bash
 npm start
-# Expected Output: "CIRO Engine running on port 3000"
 ```
 
-**Start the Mobile Application:**
+Both together:
+
 ```bash
-# Open a new terminal window in root
-npx expo start
+npm run dev
 ```
-*Press `i` in the terminal to open iOS emulator, `a` for Android, or scan the QR code with your phone via Expo Go.*
 
----
+## API Routes
 
-## 🔌 API & Services Reference
+### Health
 
-The Node.js server exposes several utilities:
+- `GET /api/health`
 
-| Endpoint | Method | Purpose |
-| :--- | :--- | :--- |
-| `/api/health` | `GET` | Polled by React Query. Checks Gemini, Maps, and Weather uptime. |
-| `/api/orchestrate/live/stream`| `POST` | Core SSE endpoint. Ingests crisis payload, returns text/event-stream chunks representing the AI multi-agent 10-step progress. |
-| `/api/weather/live` | `GET` | Proxies the Open-Meteo API returning formatted degrees/flood-risks. |
-| `/api/gemini/evaluate` | `POST` | Returns a strict JSON assessment and realism score based on a simulated action outcome. |
+### Weather
 
----
+- `GET /api/weather/:location`
+- `GET /api/mock/weather`
 
-## 🛠️ Troubleshooting Guide
+### Maps
 
-**1. Network Errors / Network Request Failed (Expo):**
-*   **Cause**: Expo cannot route `localhost` from a physical device.
-*   **Fix**: Update `EXPO_PUBLIC_API_BASE_URL` to your computer's local Wi-Fi IP address (e.g., `http://192.168.1.55:3000`).
+- `GET /api/maps/routes`
+- `GET /api/maps/traffic/:location`
+- `GET /api/maps/emergency-services/:type`
+- `POST /api/maps/geocode`
+- `GET /api/maps/reverse-geocode`
 
-**2. Missing Maps / Blank Grey Squares:**
-*   **Cause**: Invalid or restricted Google Maps API Key.
-*   **Fix**: Ensure your Maps API Key has "Maps SDK for Android/iOS", "Places API", and "Directions API" enabled in Google Cloud Console.
+### Gemini
 
-**3. Stream Clashing (SSE Stops Prematurely):**
-*   **Cause**: AI token limit hit or timeout.
-*   **Fix**: Ensure backend `.env` Gemini keys are valid and billing is active if you exceed the free tier limits of Gemini 2.0 Flash.
+- `POST /api/gemini/analyze`
+- `GET /api/gemini/stream`
+- `POST /api/gemini/action-plan`
+- `POST /api/gemini/evaluate`
 
-**4. Port 3000 in Use:**
-*   **Cause**: Another service is occupying the backend port.
-*   **Fix**: Change `PORT=3001` in `/server/.env` and update the `EXPO_PUBLIC_API_BASE_URL` to match. 
+### Agent Simulation
 
----
-*Developed for intelligent, localized emergency orchestration and rapid multi-layered response management.*
+- `POST /api/agent/detect`
+- `POST /api/agent/analyze`
+- `POST /api/agent/plan`
+- `POST /api/agent/simulate`
+
+### Full Orchestration
+
+- `POST /api/orchestrate`
+- `POST /api/orchestrate/live`
+- `POST /api/orchestrate/live/stream`
+
+## Troubleshooting
+
+### Analysis Screen Stays Empty
+
+- Make sure a scenario is loaded or signals are present.
+- Confirm Demo mode matches the type of session you are opening.
+- Verify the backend URL is correct.
+
+### Actions Screen Keeps Loading
+
+- Check that the backend is running on port `3000`.
+- Confirm `EXPO_PUBLIC_API_BASE_URL` points to the right host.
+- Make sure the session contains actions.
+
+### Maps Do Not Render
+
+- Ensure `react-native-maps` is installed.
+- Add a valid Google Maps API key for live map support.
+- On web, a fallback visualization is used instead of native maps.
+
+### Live SSE Does Not Stream
+
+- Confirm `/api/orchestrate/live/stream` is reachable.
+- Check the backend terminal for API or key errors.
+- Use live mode only when the backend environment variables are set.
+
+## Notes
+
+- Demo mode is deterministic and presentation-friendly.
+- Live mode depends on external APIs and environment variables.
+- The response plan, evacuation routing, and simulation outcome are intended to be visible on the map and in the session summary.

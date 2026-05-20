@@ -1,7 +1,6 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { FadeInUp } from 'react-native-reanimated';
 import { COLORS } from '../../constants/colors';
 import { Card } from './Card';
 
@@ -15,38 +14,53 @@ interface ScenarioCardProps {
 }
 
 export function ScenarioCard({ title, subtitle, location, iconName, onPress, index }: ScenarioCardProps) {
-  // Vibrant gradients/badges matching each specific crisis type
+  const translateY = useRef(new Animated.Value(20)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 400,
+        delay: index * 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(translateY, {
+        toValue: 0,
+        duration: 400,
+        delay: index * 100,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+
   const getAccentColor = (): string => {
-    if (title.includes('Flooding')) return COLORS.primary; // Blue
-    if (title.includes('Accident')) return COLORS.danger; // Red
-    if (title.includes('Heatwave')) return COLORS.warning; // Yellow
-    return '#F59E0B'; // Orange for Grid Failure
+    if (title.includes('Flooding')) return COLORS.primary;
+    if (title.includes('Accident')) return COLORS.danger;
+    if (title.includes('Heatwave')) return COLORS.warning;
+    return '#F59E0B';
   };
 
   const accentColor = getAccentColor();
 
   return (
-    <Animated.View entering={FadeInUp.delay(index * 100).duration(400)}>
+    <Animated.View style={{ opacity, transform: [{ translateY }] }}>
       <TouchableOpacity onPress={onPress} activeOpacity={0.8}>
         <Card variant="neutral" style={styles.cardContainer}>
           <View style={styles.cardContent}>
-            {/* Left Icon Area */}
             <View style={[styles.iconWrapper, { backgroundColor: `${accentColor}15`, borderColor: `${accentColor}30` }]}>
               <Ionicons name={iconName} size={22} color={accentColor} />
             </View>
 
-            {/* Center Text Area */}
             <View style={styles.infoWrapper}>
               <Text style={styles.titleText}>{title}</Text>
               <Text style={styles.subText} numberOfLines={1}>{subtitle}</Text>
-              
               <View style={styles.locRow}>
                 <Ionicons name="location-outline" size={12} color={COLORS.textSecondary} />
                 <Text style={styles.locText}>{location}</Text>
               </View>
             </View>
 
-            {/* Right Action Trigger */}
             <View style={styles.actionWrapper}>
               <Text style={[styles.actionText, { color: accentColor }]}>Analyze</Text>
               <Ionicons name="arrow-forward" size={14} color={accentColor} />

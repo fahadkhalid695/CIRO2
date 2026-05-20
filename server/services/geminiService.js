@@ -266,7 +266,9 @@ Format the output strictly as a JSON array of actionable tasks:
       return getFallbackActionPlan(situation, weatherData, nearbyServices);
     }
 
-    const result = await model.generateContent({ contents: prompt });
+    const result = await model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }]
+    });
     const responseText = result.response.text();
     const cleanText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
 
@@ -411,7 +413,9 @@ Provide a critique of the simulation quality. Return strictly in JSON format:
       return getFallbackOutcomeEvaluation(before, after, actions);
     }
 
-    const result = await model.generateContent({ contents: prompt });
+    const result = await model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }]
+    });
     const responseText = result.response.text();
     const cleanText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
 

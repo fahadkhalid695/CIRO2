@@ -408,6 +408,8 @@ app.post('/api/orchestrate/live/stream', async (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+    // Disable response buffering so each write is flushed immediately
+    if (res.flushHeaders) res.flushHeaders();
 
     console.log(`[Server] SSE Stream active. Spawning live orchestrator pipeline...`);
 
@@ -415,9 +417,16 @@ app.post('/api/orchestrate/live/stream', async (req, res) => {
       res.write(`data: ${JSON.stringify(event)}\n\n`);
     });
 
+    // Explicitly close the stream so the client reader.read() resolves with done=true
+    res.end();
+
   } catch (error) {
     console.error('[Server] Live Orchestration Streaming Error:', error);
-    if (!res.headersSent) {
+    // Send error as SSE event so client can handle it gracefully
+    if (res.headersSent) {
+      res.write(`data: ${JSON.stringify({ type: 'error', data: { message: error.message } })}\n\n`);
+      res.end();
+    } else {
       res.status(500).json({ success: false, error: error.message });
     }
   }
